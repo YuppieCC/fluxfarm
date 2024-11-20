@@ -41,9 +41,17 @@ library SqrtPriceMath {
     }
 
     function priceToSqrtPriceX96(uint256 price) external pure returns (uint160 sqrtPriceX96) {
-        require(price > 0, "Price must be greater than zero");
-        uint256 sqrtPrice = sqrt(price);
-        uint256 sqrtPriceX96_ = sqrtPrice * Q96;
-        sqrtPriceX96 = uint160(sqrtPriceX96_);
+        require(price > 0, "Price must be greater than 0");
+
+        // Scale price up to 2^192 for sqrtPriceX96 computation
+        uint256 scaledPrice = price << 192; // Equivalent to multiplying by 2^192
+
+        // Take the square root of the scaled price
+        uint256 sqrtPrice = sqrt(scaledPrice);
+
+        // Ensure the result fits in uint160
+        require(sqrtPrice <= type(uint160).max, "sqrtPrice exceeds uint160 range");
+        sqrtPriceX96 = uint160(sqrtPrice);
     }
+
 }
