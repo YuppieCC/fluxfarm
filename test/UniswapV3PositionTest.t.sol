@@ -43,7 +43,34 @@ contract UniswapV3PositionTest is Test {
     address public token1_oracle = 0x4e1C6B168DCFD7758bC2Ab9d2865f1895813D236;  // wld-usd
 
     address public user_ = 0xDE1e26F53aa97f02c06779F280A7DE56d06EbbaD;
-        
+
+    int24[][] public ticks = [
+        [int24(252200), int24(254800)],
+        [int24(254000), int24(256600)],
+        [int24(255800), int24(258400)],
+        [int24(257600), int24(260200)],
+        [int24(259400), int24(262000)],
+        [int24(261200), int24(263800)],
+        [int24(263000), int24(265800)],
+        [int24(265000), int24(267600)],
+        [int24(266800), int24(269400)],
+        [int24(268600), int24(271200)],
+        [int24(270400), int24(273000)],
+        [int24(272200), int24(274800)],
+        [int24(272600), int24(275200)],
+        [int24(274400), int24(277000)],
+        [int24(276200), int24(278800)],
+        [int24(278000), int24(280600)],
+        [int24(279800), int24(282400)],
+        [int24(281600), int24(284200)],
+        [int24(283400), int24(286000)],
+        [int24(285200), int24(288000)],
+        [int24(287200), int24(289800)],
+        [int24(289000), int24(291600)],
+        [int24(290800), int24(293400)],
+        [int24(292600), int24(295200)]
+    ];
+   
     function setUp() public {
         positionManager = INonfungiblePositionManager(positionManagerAddress);
         swapRouter = ISwapRouter(swapRouterAddress);
@@ -56,6 +83,7 @@ contract UniswapV3PositionTest is Test {
         token1_oracle_deimals = uint256(IEACAggregatorProxy(token1_oracle).decimals());
         assert(token0_decimals > 0 && token1_decimals > 0);
         assert(token0_oracle_deimals > 0 && token1_oracle_deimals > 0);
+
     }
 
     function swap_exactInputSingle(
@@ -111,11 +139,13 @@ contract UniswapV3PositionTest is Test {
         int24 tick_lower,
         int24 tick_upper
     ) public returns (uint256, uint256) {
-        uint256 _factor = LiqAmountCalculator.getFactor(tick_current, tick_lower, tick_upper, token0_decimals, token1_decimals);
-        emit log_named_uint("factor: ", _factor);
+        (uint256 token0_factor, uint256 token1_factor) = LiqAmountCalculator.getFactor(tick_current, tick_lower, tick_upper, token0_decimals, token1_decimals);
+        // emit log_named_uint("token0_factor: ", token0_factor);
+        // emit log_named_uint("token1_factor: ", token1_factor);
 
         return LiqAmountCalculator.getAmountByBestLiquidity(
-            _factor,
+            token0_factor,
+            token1_factor,
             totalValue_,
             token0_decimals,
             token1_decimals,
@@ -198,7 +228,7 @@ contract UniswapV3PositionTest is Test {
         return (amount0_out, amount1_out);
     }
 
-     function test_collect() public {
+     function collect() public {
         vm.startPrank(user_);
         uint256 balance = IERC721(positionManagerAddress).balanceOf(user_);
         emit log_named_uint("Position balance: ", balance);
@@ -260,16 +290,9 @@ contract UniswapV3PositionTest is Test {
         }
     }
 
-    function calculateRange(uint160 sqrtPriceX96) public returns (uint160 sqrtPriceX96Min, uint160 sqrtPriceX96Max) {
-        require(sqrtPriceX96 > 0, "Invalid sqrtPriceX96");
-        // uint256 sqrtPriceX96_ = uint256(sqrtPriceX96);
-        uint256 sqrtPrice = uint256(sqrtPriceX96) * 1e18 / Q96;
-
-        uint256 sqrt_0_7 = 836660026534075600; // sqrt(0.7) * 1e18
-        uint256 sqrt_1_3 = 1140175425099138000; // sqrt(1.3) * 1e18
-
-        sqrtPriceX96Min = uint160((uint256(sqrtPriceX96) * sqrt_0_7) / 1e18);
-        sqrtPriceX96Max = uint160((uint256(sqrtPriceX96) * sqrt_1_3) / 1e18);
+    function calculateRange(uint256 now_price) public returns (uint256 min_price, uint256 max_price) {
+        min_price = now_price * 70 / 100;
+        max_price = now_price * 130 / 100;
     }
 
     function test_sqrtPriceX96ToPrice() public {
@@ -277,20 +300,32 @@ contract UniswapV3PositionTest is Test {
         // uint256 price = sqrtPriceX96ToPrice(sqrtPriceX96, 6, 18);
         // emit log_named_uint("price: ", price);
 
-        uint160 sqrtPriceX96 = 52211182093678445753969948736418719;
-        
-        (uint160 sqrtPriceX96Min, uint160 sqrtPriceX96Max) = calculateRange(sqrtPriceX96);
-        emit log_named_uint("sqrtPriceX96Min: ", sqrtPriceX96Min);
-        emit log_named_uint("sqrtPriceX96Max: ", sqrtPriceX96Max);
-        uint256 now_price = sqrtPriceX96ToPrice(sqrtPriceX96, 6, 18);
-        uint256 min_price = sqrtPriceX96ToPrice(sqrtPriceX96Min, 6, 18);
-        uint256 max_price = sqrtPriceX96ToPrice(sqrtPriceX96Max, 6, 18);
-
-        uint256 now_sqrtPriceX96 = SqrtPriceMath.priceToSqrtPriceX96(now_price);
-        emit log_named_uint("now_sqrtPriceX96: ", now_sqrtPriceX96);
+        uint160 sqrtPriceX96 = 52211182093678445753969948736418719;  // 
+        uint256 now_price = sqrtPriceX96ToPrice(sqrtPriceX96, token0_decimals, token1_decimals);
+        (uint256 min_price, uint256 max_price) = calculateRange(now_price);
         emit log_named_uint("now_price: ", now_price);
         emit log_named_uint("min_price: ", min_price);
         emit log_named_uint("max_price: ", max_price);
+
+        uint160 min_sqrtPriceX96 = SqrtPriceMath.priceToSqrtPriceX96(min_price);
+        uint160 max_sqrtPriceX96 = SqrtPriceMath.priceToSqrtPriceX96(max_price);
+        emit log_named_uint("min_sqrtPriceX96: ", min_sqrtPriceX96);
+        emit log_named_uint("max_sqrtPriceX96: ", max_sqrtPriceX96);
+
+        int24 min_tick = TickMath.getTickAtSqrtRatio(min_sqrtPriceX96);
+        int24 max_tick = TickMath.getTickAtSqrtRatio(max_sqrtPriceX96);
+        emit log_named_int("min_tick: ", min_tick);
+        emit log_named_int("max_tick: ", max_tick);
+
+        uint160 sqrtPriceX96_lower = TickMath.getSqrtRatioAtTick(min_tick);
+        uint160 sqrtPriceX96_upper = TickMath.getSqrtRatioAtTick(max_tick);
+        emit log_named_uint("sqrtPriceX96_lower: ", sqrtPriceX96_lower);
+        emit log_named_uint("sqrtPriceX96_upper: ", sqrtPriceX96_upper);
+
+        uint256 _min_price = sqrtPriceX96ToPrice(sqrtPriceX96_lower, token0_decimals, token1_decimals);
+        uint256 _max_price = sqrtPriceX96ToPrice(sqrtPriceX96_upper, token0_decimals, token1_decimals);
+        emit log_named_uint("fact min_price: ", _min_price);
+        emit log_named_uint("fact max_price: ", _max_price);
     }
 
     function test_tick_math() public {
@@ -301,6 +336,11 @@ contract UniswapV3PositionTest is Test {
         emit log_named_uint("sqrtPriceX96_lower: ", sqrtPriceX96_lower);
         emit log_named_uint("sqrtPriceX96_upper: ", sqrtPriceX96_upper);
 
+        uint256 price_lower = sqrtPriceX96ToPrice(sqrtPriceX96_lower, 6, 18);
+        uint256 price_upper = sqrtPriceX96ToPrice(sqrtPriceX96_upper, 6, 18);
+        emit log_named_uint("price_lower: ", price_lower);
+        emit log_named_uint("price_upper: ", price_upper);
+
         int24 original_ticker_lower = TickMath.getTickAtSqrtRatio(sqrtPriceX96_lower);
         int24 original_ticker_upper = TickMath.getTickAtSqrtRatio(sqrtPriceX96_upper);
         emit log_named_int("original_ticker_lower: ", original_ticker_lower);
@@ -308,13 +348,56 @@ contract UniswapV3PositionTest is Test {
     }
 
     function test_liquidity_amounts() public {
-        int24 tick_current = 267941;
+        int24 tick_current = 281200;
         int24 tick_lower = 265000;
         int24 tick_upper = 271200;
-        uint256 totalValue = 320e18;
+        uint256 totalValue = 16e18;
         
         (uint256 token0_amount, uint256 token1_amount) = getAmountByBestLiquidity(totalValue, tick_current, tick_lower, tick_upper);
         emit log_named_uint("token0_amount: ", token0_amount);
         emit log_named_uint("token1_amount: ", token1_amount);
+    }
+
+    function test_initial_position() public {
+        int24 tick_current = 267941;
+        uint256 totalValue = 2e18;
+        // IERC20(token0).approve(address(positionManager), token0_amount);
+        // IERC20(token1).approve(address(positionManager), token1_amount);
+
+        for (uint256 i = 0; i < ticks.length; i++) {
+            int24 tick_lower = ticks[i][0];
+            int24 tick_upper = ticks[i][1];
+            (uint256 token0_amount, uint256 token1_amount) = getAmountByBestLiquidity(totalValue, tick_current, tick_lower, tick_upper);
+            // emit log_named_uint("token0_amount: ", token0_amount);
+            // emit log_named_uint("token1_amount: ", token1_amount);
+
+            INonfungiblePositionManager.MintParams memory params = INonfungiblePositionManager.MintParams({
+                token0: token0,
+                token1: token1,
+                fee: fee,
+                tickLower: tick_lower,
+                tickUpper: tick_upper,
+                amount0Desired: token0_amount * 9 / 10,
+                amount1Desired: token1_amount * 9 / 10,
+                amount0Min: 0,         // Should set these to acceptable slippage values
+                amount1Min: 0,         // Should set these to acceptable slippage values
+                recipient: user_,
+                deadline: block.timestamp + 15 minutes
+            });
+            // emit log("MintParams done");
+
+            vm.startPrank(user_);
+            (uint tokenId, uint liquidity, uint amount0, uint amount1) = positionManager.mint(params);
+            emit log_named_uint("tokenId: ", tokenId);
+            // emit log_named_uint("liquidity: ", liquidity);
+            // emit log_named_uint("amount0: ", amount0);
+            // emit log_named_uint("amount1: ", amount1);
+            vm.stopPrank();
+            // break;
+        }
+
+        // check balances
+        uint256 balance = IERC721(positionManagerAddress).balanceOf(user_);
+        emit log_named_uint("Position balance: ", balance);
     }
 }
