@@ -60,7 +60,7 @@ library LiqAmountCalculator {
         uint256 token1_decimals,
         uint256 token0PriceIn18,
         uint256 token1PriceIn18
-    ) public view returns (uint256, uint256) {
+    ) public pure returns (uint256, uint256) {
         // why:
         // token1_amount = token1_factor * token0_amount
         // totalValue_ = token0_factor * token0_amount * token0PriceIn18 + token1_factor * token0_amount * token1PriceIn18

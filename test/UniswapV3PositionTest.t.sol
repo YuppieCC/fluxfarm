@@ -25,11 +25,21 @@ contract UniswapV3PositionTest is Test {
     IUniswapV3PoolState public poolState;
     // IUniswapV3Factory public factory;
     ISwapRouter public swapRouter;
+
     uint24 public fee = 10000;
+
+    struct FarmingInfo {
+        uint256 tokenId;
+        int24 tickLower;
+        int24 tickUpper;
+    }
+
     uint256 public token0_decimals;
     uint256 public token1_decimals;
     uint256 public token0_oracle_deimals;
     uint256 public token1_oracle_deimals;
+    FarmingInfo public farmingInfo;
+    IUniswapV3PoolState.Slot0 public farming_slot0;
 
     address public positionManagerAddress = 0xC36442b4a4522E871399CD717aBDD847Ab11FE88;
     // address public factoryAddress = 0x1F98431c8aD98523631AE4a59f267346ea31F984;
@@ -81,6 +91,16 @@ contract UniswapV3PositionTest is Test {
         token1_decimals = uint256(IERC20Metadata(token1).decimals());
         token0_oracle_deimals = uint256(IEACAggregatorProxy(token0_oracle).decimals());
         token1_oracle_deimals = uint256(IEACAggregatorProxy(token1_oracle).decimals());
+        (
+            farming_slot0.sqrtPriceX96,
+            farming_slot0.tick,
+            farming_slot0.observationIndex,
+            farming_slot0.observationCardinality,
+            farming_slot0.observationCardinalityNext,
+            farming_slot0.feeProtocol,
+            farming_slot0.unlocked
+        ) = poolState.slot0();
+
         assert(token0_decimals > 0 && token1_decimals > 0);
         assert(token0_oracle_deimals > 0 && token1_oracle_deimals > 0);
 
@@ -92,9 +112,8 @@ contract UniswapV3PositionTest is Test {
         address tokenOut,
         uint256 amountIn,
         uint256 amountOutMin,
-        uint24 fee,
         address recipient
-    ) public returns (uint256 amountOut) {
+    ) public returns (uint256) {
         vm.startPrank(user);
         IERC20(tokenIn).approve(address(swapRouter), amountIn);
         ISwapRouter.ExactInputSingleParams memory params = ISwapRouter.ExactInputSingleParams({
@@ -113,25 +132,30 @@ contract UniswapV3PositionTest is Test {
         return amountOut;
     }
 
-    function sqrtPriceX96ToPrice(uint160 sqrtPriceX96, uint256 decimalsToken0, uint256 decimalsToken1) internal view returns (uint256) {
+    function sqrtPriceX96ToPrice(uint160 sqrtPriceX96, uint256 decimalsToken0, uint256 decimalsToken1) internal pure returns (uint256) {
         return SqrtPriceMath.sqrtPriceX96ToPrice(sqrtPriceX96, decimalsToken0, decimalsToken1);
     }
 
-    function getPriceIn1e18(address oracleAddress_) internal view returns (uint256) {
+    function getPriceIn1e18(address oracleAddress_, uint256 oracle_decimals) internal view returns (uint256) {
         (, int price, , , ) = IEACAggregatorProxy(oracleAddress_).latestRoundData();  // price is in 1e8
-        uint256 oracle_deimals = uint256(IEACAggregatorProxy(oracleAddress_).decimals());
         require(price > 0, "Invalid price data");
-        return uint256(price) * 1e18 / (10 ** oracle_deimals);
+        return uint256(price) * 1e18 / (10 ** oracle_decimals);
     }
 
     function getPositionValue(uint256 token0_amount, uint256 token1_amount) public view returns (uint256) {
-        uint256 token0PriceIn18 = getPriceIn1e18(token0_oracle);
-        uint256 token1PriceIn18 = getPriceIn1e18(token1_oracle);
+        uint256 token0PriceIn18 = getPriceIn1e18(token0_oracle, token0_oracle_deimals);
+        uint256 token1PriceIn18 = getPriceIn1e18(token1_oracle, token1_oracle_deimals);
 
         uint256 token0_usd_value = token0_amount * token0PriceIn18 / (10 ** token0_decimals);
         uint256 token1_usd_value = token1_amount * token1PriceIn18 / (10 ** token1_decimals);
         return token0_usd_value + token1_usd_value;
     }
+
+    function calculateRange(uint256 now_price) public pure returns (uint256 min_price, uint256 max_price) {
+        min_price = now_price * 70 / 100;
+        max_price = now_price * 130 / 100;
+    }
+
 
     function getAmountByBestLiquidity(
         uint256 totalValue_,
@@ -140,8 +164,8 @@ contract UniswapV3PositionTest is Test {
         int24 tick_upper
     ) public returns (uint256, uint256) {
         (uint256 token0_factor, uint256 token1_factor) = LiqAmountCalculator.getFactor(tick_current, tick_lower, tick_upper, token0_decimals, token1_decimals);
-        // emit log_named_uint("token0_factor: ", token0_factor);
-        // emit log_named_uint("token1_factor: ", token1_factor);
+        emit log_named_uint("token0_factor: ", token0_factor);
+        emit log_named_uint("token1_factor: ", token1_factor);
 
         return LiqAmountCalculator.getAmountByBestLiquidity(
             token0_factor,
@@ -149,14 +173,18 @@ contract UniswapV3PositionTest is Test {
             totalValue_,
             token0_decimals,
             token1_decimals,
-            getPriceIn1e18(token0_oracle),
-            getPriceIn1e18(token1_oracle)
+            getPriceIn1e18(token0_oracle, token0_oracle_deimals),
+            getPriceIn1e18(token1_oracle, token1_oracle_deimals)
         );
     }
 
-    function swap_token(address user, uint256 amount0, uint256 amount1, uint256 amount0_target, uint256 amount1_target) internal returns (
-        uint256 amount0_out, uint256 amount1_out
-    ) {
+    function swap_token(
+        address user,
+        uint256 amount0,
+        uint256 amount1,
+        uint256 amount0_target,
+        uint256 amount1_target
+    ) internal returns (uint256, uint256) {
         if (amount0 > amount0_target) {
             uint256 amount0_swap = amount0 - amount0_target;
             uint256 amount1_result = swap_exactInputSingle(
@@ -165,7 +193,6 @@ contract UniswapV3PositionTest is Test {
                 token1,
                 amount0_swap,
                 0,
-                fee,
                 user
             );
             uint256 amount1_out = amount1 + amount1_result;
@@ -180,7 +207,6 @@ contract UniswapV3PositionTest is Test {
                 token0,
                 amount1_swap,
                 0,
-                fee,
                 user
             );
             uint256 amount0_out = amount0 + amount0_result;
@@ -188,118 +214,149 @@ contract UniswapV3PositionTest is Test {
         }
     }
 
-    // function test_getPositionValue() public {
-    //     uint256 token0_amount = 1000 * (10 ** token0_decimals);
-    //     uint256 token1_amount = 1000 * (10 ** token1_decimals);
-    //     uint256 value = getPositionValue(token0_amount, token1_amount);
-    //     emit log_named_uint("value: ", value);
-    // }
-
-    // function test_get_best_liquidity() public {
-    //     uint256 totalValue_ = 320e18;
-    //     (uint256 token0_amount, uint256 token1_amount) = get_best_liquidity(factor, totalValue_);
-    //     emit log_named_uint("token0_amount: ", token0_amount);
-    //     emit log_named_uint("token1_amount: ", token1_amount);
-    // }
-
-    function rebalance_position(address user, uint256 tokenId, int24 tickCurrent, int24 tickLower, int24 tickUpper) internal returns (uint256 amount0_out, uint256 amount1_out) {
-        INonfungiblePositionManager.CollectParams memory collectParams = INonfungiblePositionManager.CollectParams({
-            tokenId: tokenId,
-            recipient: user,
-            amount0Max: type(uint128).max,
-            amount1Max: type(uint128).max
-        });
-
-        (uint amount0_fee, uint amount1_fee) = positionManager.collect(collectParams);
-        emit log_named_uint("amount0_fee: ", amount0_fee);
-        emit log_named_uint("amount1_fee: ", amount1_fee);
-
-        uint256 totalValue = getPositionValue(amount0_fee, amount1_fee);
+    function rebalance_position(address user) internal returns (uint256, uint256) {
+        uint256 token0_balance = IERC20(token0).balanceOf(user);
+        uint256 token1_balance = IERC20(token1).balanceOf(user);
+        
+        uint256 totalValue = getPositionValue(
+            token0_balance,
+            token1_balance
+        );
         emit log_named_uint("totalValue: ", totalValue);
 
-        (uint256 token0_amount, uint256 token1_amount) = getAmountByBestLiquidity(totalValue, tickCurrent, tickLower, tickUpper);
-        emit log_named_uint("token0_amount: ", token0_amount);
-        emit log_named_uint("token1_amount: ", token1_amount);
+        (uint256 amount0_target, uint256 amount1_target) = getAmountByBestLiquidity(
+            totalValue,
+            farming_slot0.tick,
+            farmingInfo.tickLower,
+            farmingInfo.tickUpper
+        );
+        emit log_named_uint("token0_amount: ", amount0_target);
+        emit log_named_uint("token1_amount: ", amount1_target);
 
-        (amount0_out, amount1_out) = swap_token(user_, amount0_fee, amount1_fee, token0_amount, token1_amount);
+        (uint256 amount0_out, uint256 amount1_out) = swap_token(user_, token0_balance, token1_balance, amount0_target, amount1_target);
         emit log_named_uint("amount0_out: ", amount0_out);
         emit log_named_uint("amount1_out: ", amount1_out);
 
-        return (amount0_out, amount1_out);
+        uint256 now_token0_balance = IERC20(token0).balanceOf(user_);
+        uint256 now_token1_balance = IERC20(token1).balanceOf(user_);
+        emit log_named_uint("now_token0_balance: ", now_token0_balance);
+        emit log_named_uint("now_token1_balance: ", now_token1_balance);
+        // return (
+        //     IERC20(token0).balanceOf(user_),
+        //     IERC20(token1).balanceOf(user_)
+        // );
+        return (now_token0_balance, now_token1_balance);
     }
 
-     function collect() public {
-        vm.startPrank(user_);
+    function _harvest(int24 tickCurrent, uint256 tokenId) internal returns (uint256 amount0, uint256 amount1, uint256 fee0, uint256 fee1) {
+        (,,,,,int24 tickLower,int24 tickUpper,uint128 liquidity,,,,) = positionManager.positions(tokenId);
+
+        // out of range
+        if (tickCurrent < tickLower || tickCurrent > tickUpper) {
+            // check liquidity
+            if (liquidity > 0) {
+                // decrease liquidity
+                (amount0, amount1) = positionManager.decreaseLiquidity(
+                    INonfungiblePositionManager.DecreaseLiquidityParams({
+                        tokenId: tokenId,
+                        liquidity: liquidity,
+                        amount0Min: 0,         // Should set these to acceptable slippage values
+                        amount1Min: 0,         // Should set these to acceptable slippage values
+                        deadline: block.timestamp + 15 minutes
+                }));
+
+                // collect
+                (fee0, fee1) = positionManager.collect(
+                    INonfungiblePositionManager.CollectParams({
+                        tokenId: tokenId,
+                        recipient: user_,
+                        amount0Max: type(uint128).max,
+                        amount1Max: type(uint128).max
+                }));
+                return (amount0, amount1, fee0, fee1);
+            } else {
+                // no liquidity, no need to harvest
+                return (0, 0, 0, 0);
+            }
+        } else {
+            // in range
+            if (liquidity > 0) {
+                // collect fee
+                farmingInfo.tokenId = tokenId;
+                farmingInfo.tickLower = tickLower;
+                farmingInfo.tickUpper = tickUpper;
+                (fee0, fee1) = positionManager.collect(
+                    INonfungiblePositionManager.CollectParams({
+                        tokenId: tokenId,
+                        recipient: user_,
+                        amount0Max: type(uint128).max,
+                        amount1Max: type(uint128).max
+                }));
+                return (amount0, amount1, fee0, fee1);
+            } else {
+                // no liquidity, no need to harvest
+                return (0, 0, 0, 0);
+            }
+        }        
+    }
+
+    function harvest() public {
         uint256 balance = IERC721(positionManagerAddress).balanceOf(user_);
-        emit log_named_uint("Position balance: ", balance);
-
-        (,int24 tickCurrent, , , , , ) = poolState.slot0();
-        emit log_named_int("tickCurrent: ", tickCurrent);
-
         for (uint256 i = 0; i < balance; i++) {
             uint256 tokenId = IERC721Enumerable(positionManagerAddress).tokenOfOwnerByIndex(user_, i);
-            // get liquidity
-            (,,,,,int24 tickLower,int24 tickUpper,uint128 liquidity,,,,) = positionManager.positions(tokenId);
-            if (liquidity > 0) {
-                // collect
-                (uint256 amount0_out, uint256 amount1_out) = rebalance_position(
-                    user_,
-                    tokenId,
-                    tickCurrent,
-                    tickLower,
-                    tickUpper
-                );
-
-                uint256 token0_balance = IERC20(token0).balanceOf(user_);
-                uint256 token1_balance = IERC20(token1).balanceOf(user_);
-                emit log_named_uint("token0_balance: ", token0_balance);
-                emit log_named_uint("token1_balance: ", token1_balance);
-                // increase liquidity
-                vm.startPrank(user_);
-                (uint128 liquidity, uint256 amount0, uint256 amount1) = positionManager.increaseLiquidity(
-                    INonfungiblePositionManager.IncreaseLiquidityParams({
-                        tokenId: tokenId,
-                        amount0Desired: amount0_out,
-                        amount1Desired: amount1_out,
-                        amount0Min: amount0_out * 90 / 100,
-                        amount1Min: amount1_out * 90 / 100,
-                        deadline: block.timestamp + 15 minutes
-                    })
-                );
-                emit log_named_uint("liquidity: ", liquidity);
-                emit log_named_uint("amount0: ", amount0);
-                emit log_named_uint("amount1: ", amount1);
-                vm.stopPrank();
-            }
+            emit log_named_uint("tokenId: ", tokenId);
+            // harvest
+            (uint256 amount0, uint256 amount1, uint256 fee0, uint256 fee1) = _harvest(farming_slot0.tick, tokenId);
+            emit log_named_uint("amount0: ", amount0);
+            emit log_named_uint("amount1: ", amount1);
+            emit log_named_uint("fee0: ", fee0);
+            emit log_named_uint("fee1: ", fee1);
         }
+    }
+
+    function _reinvest() public returns (uint128, uint256, uint256) {
+        if (farmingInfo.tokenId == 0) {
+            emit log("No position to reinvest");
+            return (0, 0, 0);
+        }
+
+        (uint256 amount0_out, uint256 amount1_out) = rebalance_position(user_);
+
+        vm.startPrank(user_);
+        // increase liquidity
+        (uint128 liquidity, uint256 amount0, uint256 amount1) = positionManager.increaseLiquidity(
+            INonfungiblePositionManager.IncreaseLiquidityParams({
+                tokenId: farmingInfo.tokenId,
+                amount0Desired: amount0_out,
+                amount1Desired: amount1_out,
+                amount0Min: amount0_out * 9 / 100,
+                amount1Min: amount1_out * 9 / 100,
+                deadline: block.timestamp + 15 minutes
+            })
+        );
+        emit log_named_uint("farming_tokenId: ", farmingInfo.tokenId);
+        emit log_named_uint("liquidity: ", liquidity);
+        emit log_named_uint("amount0: ", amount0);
+        emit log_named_uint("amount1: ", amount1);
         vm.stopPrank();
-        uint256 Nowbalance = IERC721(positionManagerAddress).balanceOf(user_);
-        emit log_named_uint("Position balance: ", Nowbalance);
+        return (liquidity, amount0, amount1);
     }
 
-    function sqrt(uint y) internal pure returns (uint z) {
-        if (y > 3) {
-            z = y;
-            uint x = y / 2 + 1;
-            while (x < z) {
-                z = x;
-                x = (y / x + x) / 2;
-            }
-        } else if (y != 0) {
-            z = 1;
-        }
+    function test_getPositionValue() public {
+        uint256 token0_amount = 1000 * (10 ** token0_decimals);
+        uint256 token1_amount = 1000 * (10 ** token1_decimals);
+        uint256 value = getPositionValue(token0_amount, token1_amount);
+        emit log_named_uint("value: ", value);
     }
 
-    function calculateRange(uint256 now_price) public returns (uint256 min_price, uint256 max_price) {
-        min_price = now_price * 70 / 100;
-        max_price = now_price * 130 / 100;
+    function test_reinvest() public {
+        vm.startPrank(user_);
+        harvest();
+        _reinvest();
+        vm.stopPrank();
     }
 
     function test_sqrtPriceX96ToPrice() public {
-        // uint160 sqrtPriceX96 = 51799428569318037023441682752642932;
-        // uint256 price = sqrtPriceX96ToPrice(sqrtPriceX96, 6, 18);
-        // emit log_named_uint("price: ", price);
-
         uint160 sqrtPriceX96 = 52211182093678445753969948736418719;  // 
         uint256 now_price = sqrtPriceX96ToPrice(sqrtPriceX96, token0_decimals, token1_decimals);
         (uint256 min_price, uint256 max_price) = calculateRange(now_price);
@@ -359,15 +416,12 @@ contract UniswapV3PositionTest is Test {
     }
 
     function test_initial_position() public {
-        int24 tick_current = 267941;
-        uint256 totalValue = 2e18;
-        // IERC20(token0).approve(address(positionManager), token0_amount);
-        // IERC20(token1).approve(address(positionManager), token1_amount);
+        uint256 totalValue = 1e16;
 
         for (uint256 i = 0; i < ticks.length; i++) {
             int24 tick_lower = ticks[i][0];
             int24 tick_upper = ticks[i][1];
-            (uint256 token0_amount, uint256 token1_amount) = getAmountByBestLiquidity(totalValue, tick_current, tick_lower, tick_upper);
+            (uint256 token0_amount, uint256 token1_amount) = getAmountByBestLiquidity(totalValue, farming_slot0.tick, tick_lower, tick_upper);
             // emit log_named_uint("token0_amount: ", token0_amount);
             // emit log_named_uint("token1_amount: ", token1_amount);
 
@@ -384,11 +438,11 @@ contract UniswapV3PositionTest is Test {
                 recipient: user_,
                 deadline: block.timestamp + 15 minutes
             });
-            // emit log("MintParams done");
 
             vm.startPrank(user_);
-            (uint tokenId, uint liquidity, uint amount0, uint amount1) = positionManager.mint(params);
-            emit log_named_uint("tokenId: ", tokenId);
+            positionManager.mint(params);
+            // (uint tokenId, uint liquidity, uint amount0, uint amount1) = positionManager.mint(params);
+            // emit log_named_uint("tokenId: ", tokenId);
             // emit log_named_uint("liquidity: ", liquidity);
             // emit log_named_uint("amount0: ", amount0);
             // emit log_named_uint("amount1: ", amount1);
@@ -398,6 +452,7 @@ contract UniswapV3PositionTest is Test {
 
         // check balances
         uint256 balance = IERC721(positionManagerAddress).balanceOf(user_);
+        assertTrue(balance >= ticks.length);
         emit log_named_uint("Position balance: ", balance);
     }
 }
