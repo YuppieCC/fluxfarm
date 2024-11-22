@@ -17,6 +17,7 @@ import {IEACAggregatorProxy} from 'src/interfaces/IEACAggregatorProxy.sol';
 import {IUniswapV3PoolState} from 'src/interfaces/IUniswapV3PoolState.sol';
 import {UniswapV3PositionHelper} from 'src/libraries/UniswapV3PositionHelper.sol';
 
+import {FullMath} from '@uniswap/v3-core/contracts/libraries/FullMath.sol';
 
 contract UniswapV3PositionTest is Test {
     uint256 constant Q96 = 2**96;
@@ -192,6 +193,34 @@ contract UniswapV3PositionTest is Test {
         return (total_fees0, total_fees1);        
     }
 
+    function getTotalPositionValue() public view returns (uint256 total_amount0, uint256 total_amount1) {
+        (uint160 _sqrtPriceX96,,,,,,) = poolState.slot0();
+        uint256 balance = IERC721(positionManagerAddress).balanceOf(user_);
+        for (uint256 i = 0; i < balance; i++) {
+            uint256 tokenId = IERC721Enumerable(positionManagerAddress).tokenOfOwnerByIndex(user_, i);
+            // get position data
+            (,,,,,int24 tickLower,int24 tickUpper,uint128 liquidity,,,,) = positionManager.positions(tokenId);
+            
+            if (liquidity == 0) {
+                continue;
+            }
+
+            require(liquidity <= type(uint128).max, "liq exceeds uint128 range");
+            uint128 liq = uint128(liquidity);
+
+            // get amounts by liquidity
+            (uint256 amount0, uint256 amount1) = LiquidityAmounts.getAmountsForLiquidity(
+                _sqrtPriceX96,
+                TickMath.getSqrtRatioAtTick(tickLower),
+                TickMath.getSqrtRatioAtTick(tickUpper),
+                liq
+            );
+
+            total_amount0 += amount0;
+            total_amount1 += amount1;
+        }
+    }
+
     function calculateRange(uint256 now_price) public pure returns (uint256 min_price, uint256 max_price) {
         min_price = now_price * 70 / 100;
         max_price = now_price * 130 / 100;
@@ -314,30 +343,28 @@ contract UniswapV3PositionTest is Test {
                         amount1Max: type(uint128).max
                 }));
                 return (amount0, amount1, fee0, fee1);
-            } else {
-                // no liquidity, no need to harvest
-                return (0, 0, 0, 0);
             }
-        } else {
-            // in range
-            if (liquidity > 0) {
-                // collect fee
-                farmingInfo.tokenId = tokenId;
-                farmingInfo.tickLower = tickLower;
-                farmingInfo.tickUpper = tickUpper;
-                (fee0, fee1) = positionManager.collect(
-                    INonfungiblePositionManager.CollectParams({
-                        tokenId: tokenId,
-                        recipient: user_,
-                        amount0Max: type(uint128).max,
-                        amount1Max: type(uint128).max
-                }));
-                return (amount0, amount1, fee0, fee1);
-            } else {
-                // no liquidity, no need to harvest
-                return (0, 0, 0, 0);
-            }
-        }        
+            // no liquidity, no need to harvest
+            return (0, 0, 0, 0);
+        }
+
+        // in range
+        if (liquidity > 0) {
+            // collect fee
+            farmingInfo.tokenId = tokenId;
+            farmingInfo.tickLower = tickLower;
+            farmingInfo.tickUpper = tickUpper;
+            (fee0, fee1) = positionManager.collect(
+                INonfungiblePositionManager.CollectParams({
+                    tokenId: tokenId,
+                    recipient: user_,
+                    amount0Max: type(uint128).max,
+                    amount1Max: type(uint128).max
+            }));
+            return (amount0, amount1, fee0, fee1);
+        } 
+        // no liquidity, no need to harvest
+        return (0, 0, 0, 0);
     }
 
     function harvest() public {
@@ -437,7 +464,7 @@ contract UniswapV3PositionTest is Test {
         emit log_named_int("original_ticker_upper: ", original_ticker_upper);   
     }
 
-    function test_liquidity_amounts() public {
+    function test_getAmountByBestLiquidity() public {
         int24 tick_current = 281200;
         int24 tick_lower = 265000;
         int24 tick_upper = 271200;
@@ -500,6 +527,12 @@ contract UniswapV3PositionTest is Test {
         (uint256 total_fees0, uint256 total_fees1) = getAllPositionFees();
         emit log_named_uint("total_fees0: ", total_fees0);
         emit log_named_uint("total_fees1: ", total_fees1);
+    }
+
+    function test_getTotalPositionValue() public {
+        (uint256 total_amount0, uint256 total_amount1) = getTotalPositionValue();
+        emit log_named_uint("total_amount0: ", total_amount0);
+        emit log_named_uint("total_amount1: ", total_amount1);
     }
 
 }
