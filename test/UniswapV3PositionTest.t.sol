@@ -8,7 +8,6 @@ import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IER
 import {IERC721} from "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import {IERC721Enumerable} from "@openzeppelin/contracts/token/ERC721/extensions/IERC721Enumerable.sol";
 import {ISwapRouter} from '@uniswap/v3-periphery/contracts/interfaces/ISwapRouter.sol';
-// import {getQuoteAtTick} from '@uniswap/v3-periphery/contracts/libraries/OracleLibrary.sol';
 import {INonfungiblePositionManager} from '@uniswap/v3-periphery/contracts/interfaces/INonfungiblePositionManager.sol';
 import {SqrtPriceMath} from 'src/libraries/SqrtPriceMath.sol';
 import {TickMath} from '@uniswap/v3-core/contracts/libraries/TickMath.sol';
@@ -16,6 +15,7 @@ import {LiquidityAmounts} from '@uniswap/v3-periphery/contracts/libraries/Liquid
 import {LiqAmountCalculator} from 'src/libraries/LiqAmountCalculator.sol';
 import {IEACAggregatorProxy} from 'src/interfaces/IEACAggregatorProxy.sol';
 import {IUniswapV3PoolState} from 'src/interfaces/IUniswapV3PoolState.sol';
+import {UniswapV3PositionHelper} from 'src/libraries/UniswapV3PositionHelper.sol';
 
 
 contract UniswapV3PositionTest is Test {
@@ -136,6 +136,34 @@ contract UniswapV3PositionTest is Test {
         return SqrtPriceMath.sqrtPriceX96ToPrice(sqrtPriceX96, decimalsToken0, decimalsToken1);
     }
 
+    function getPositionFee(uint256 tokenId) public returns (uint256, uint256) {
+        (
+            ,,,,,
+            int24 tickLower,
+            int24 tickUpper,
+            uint128 liquidity,
+            uint256 feeGrowthInside0LastX128,
+            uint256 feeGrowthInside1LastX128,
+            uint128 tokensOwed0,
+            uint128 tokensOwed1
+        ) = positionManager.positions(tokenId);
+        
+        (uint256 fees0, uint256 fees1) = UniswapV3PositionHelper.getPositionFees(
+            uniswapV3PoolAddress,
+            farming_slot0.tick,
+            tickLower,
+            tickUpper,
+            liquidity,
+            feeGrowthInside0LastX128,
+            feeGrowthInside1LastX128,
+            tokensOwed0,
+            tokensOwed1
+        );
+        emit log_named_uint("fees0: ", fees0);
+        emit log_named_uint("fees1: ", fees1);
+        return (fees0, fees1);
+    }
+
     function getPriceIn1e18(address oracleAddress_, uint256 oracle_decimals) internal view returns (uint256) {
         (, int price, , , ) = IEACAggregatorProxy(oracleAddress_).latestRoundData();  // price is in 1e8
         require(price > 0, "Invalid price data");
@@ -151,11 +179,23 @@ contract UniswapV3PositionTest is Test {
         return token0_usd_value + token1_usd_value;
     }
 
+    function getAllPositionFees() public returns (uint256 total_fees0, uint256 total_fees1) {
+        uint256 balance = IERC721(positionManagerAddress).balanceOf(user_);
+        for (uint256 i = 0; i < balance; i++) {
+            uint256 tokenId = IERC721Enumerable(positionManagerAddress).tokenOfOwnerByIndex(user_, i);
+            emit log_named_uint("tokenId: ", tokenId);
+            // harvest
+            (uint256 fees0, uint256 fees1) = getPositionFee(tokenId);
+            total_fees0 += fees0;
+            total_fees1 += fees1;
+        }
+        return (total_fees0, total_fees1);        
+    }
+
     function calculateRange(uint256 now_price) public pure returns (uint256 min_price, uint256 max_price) {
         min_price = now_price * 70 / 100;
         max_price = now_price * 130 / 100;
     }
-
 
     function getAmountByBestLiquidity(
         uint256 totalValue_,
@@ -349,13 +389,6 @@ contract UniswapV3PositionTest is Test {
         emit log_named_uint("value: ", value);
     }
 
-    function test_reinvest() public {
-        vm.startPrank(user_);
-        harvest();
-        _reinvest();
-        vm.stopPrank();
-    }
-
     function test_sqrtPriceX96ToPrice() public {
         uint160 sqrtPriceX96 = 52211182093678445753969948736418719;  // 
         uint256 now_price = sqrtPriceX96ToPrice(sqrtPriceX96, token0_decimals, token1_decimals);
@@ -415,7 +448,7 @@ contract UniswapV3PositionTest is Test {
         emit log_named_uint("token1_amount: ", token1_amount);
     }
 
-    function test_initial_position() public {
+    function initial_position() public {
         uint256 totalValue = 1e16;
 
         for (uint256 i = 0; i < ticks.length; i++) {
@@ -455,4 +488,18 @@ contract UniswapV3PositionTest is Test {
         assertTrue(balance >= ticks.length);
         emit log_named_uint("Position balance: ", balance);
     }
+
+    function test_reinvest() public {
+        vm.startPrank(user_);
+        harvest();
+        _reinvest();
+        vm.stopPrank();
+    }
+
+    function test_getAllPositionFees() public {
+        (uint256 total_fees0, uint256 total_fees1) = getAllPositionFees();
+        emit log_named_uint("total_fees0: ", total_fees0);
+        emit log_named_uint("total_fees1: ", total_fees1);
+    }
+
 }
