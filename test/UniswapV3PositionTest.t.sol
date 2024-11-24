@@ -18,6 +18,8 @@ import {IUniswapV3PoolState} from 'src/interfaces/IUniswapV3PoolState.sol';
 import {UniswapV3PositionHelper} from 'src/libraries/UniswapV3PositionHelper.sol';
 
 import {FullMath} from '@uniswap/v3-core/contracts/libraries/FullMath.sol';
+import {FixedPoint96} from '@uniswap/v3-core/contracts/libraries/FixedPoint96.sol';
+import {UniswapV3Position} from 'src/UniswapV3Position.sol';
 
 contract UniswapV3PositionTest is Test {
     uint256 constant Q96 = 2**96;
@@ -26,6 +28,7 @@ contract UniswapV3PositionTest is Test {
     IUniswapV3PoolState public poolState;
     // IUniswapV3Factory public factory;
     ISwapRouter public swapRouter;
+    UniswapV3Position public uniswapV3Position;
 
     uint24 public fee = 10000;
 
@@ -193,7 +196,7 @@ contract UniswapV3PositionTest is Test {
         return (total_fees0, total_fees1);        
     }
 
-    function getTotalPositionValue() public view returns (uint256 total_amount0, uint256 total_amount1) {
+    function getTotalPositionValue() public returns (uint256 total_amount0, uint256 total_amount1) {
         (uint160 _sqrtPriceX96,,,,,,) = poolState.slot0();
         uint256 balance = IERC721(positionManagerAddress).balanceOf(user_);
         for (uint256 i = 0; i < balance; i++) {
@@ -207,6 +210,23 @@ contract UniswapV3PositionTest is Test {
 
             require(liquidity <= type(uint128).max, "liq exceeds uint128 range");
             uint128 liq = uint128(liquidity);
+
+            emit log_named_uint("_sqrtPriceX96", _sqrtPriceX96);
+            emit log_named_uint("tickLower", TickMath.getSqrtRatioAtTick(tickLower));
+            emit log_named_uint("tickUpper", TickMath.getSqrtRatioAtTick(tickUpper));
+            emit log_named_uint("liq", liq);
+
+            uint160 sqrtRatioBX96 = TickMath.getSqrtRatioAtTick(tickUpper);
+            uint160 sqrtRatioAX96 = TickMath.getSqrtRatioAtTick(tickLower);
+
+            // uint256 pre_part = uint256(liq) << FixedPoint96.RESOLUTION;
+            // emit log_named_uint("pre_part", pre_part);
+            // uint256 post_part = sqrtRatioBX96 - sqrtRatioAX96;
+            // emit log_named_uint("post_part", post_part);
+            emit log_string("--------------------------------");
+            require(sqrtRatioBX96 * sqrtRatioAX96 < type(uint256).max, "overflow");
+            uint256 div_part = sqrtRatioBX96 * sqrtRatioAX96;
+            emit log_named_uint("div_part", div_part);
 
             // get amounts by liquidity
             (uint256 amount0, uint256 amount1) = LiquidityAmounts.getAmountsForLiquidity(
@@ -329,8 +349,8 @@ contract UniswapV3PositionTest is Test {
                     INonfungiblePositionManager.DecreaseLiquidityParams({
                         tokenId: tokenId,
                         liquidity: liquidity,
-                        amount0Min: 0,         // Should set these to acceptable slippage values
-                        amount1Min: 0,         // Should set these to acceptable slippage values
+                        amount0Min: amount0 * 95 / 100,         // Should set these to acceptable slippage values
+                        amount1Min: amount1 * 95 / 100,         // Should set these to acceptable slippage values
                         deadline: block.timestamp + 15 minutes
                 }));
 
@@ -396,8 +416,8 @@ contract UniswapV3PositionTest is Test {
                 tokenId: farmingInfo.tokenId,
                 amount0Desired: amount0_out,
                 amount1Desired: amount1_out,
-                amount0Min: amount0_out * 9 / 100,
-                amount1Min: amount1_out * 9 / 100,
+                amount0Min: amount0_out * 95 / 100,
+                amount1Min: amount1_out * 95 / 100,
                 deadline: block.timestamp + 15 minutes
             })
         );
@@ -465,10 +485,10 @@ contract UniswapV3PositionTest is Test {
     }
 
     function test_getAmountByBestLiquidity() public {
-        int24 tick_current = 281200;
+        int24 tick_current = 267200;
         int24 tick_lower = 265000;
         int24 tick_upper = 271200;
-        uint256 totalValue = 16e18;
+        uint256 totalValue = 1e18;
         
         (uint256 token0_amount, uint256 token1_amount) = getAmountByBestLiquidity(totalValue, tick_current, tick_lower, tick_upper);
         emit log_named_uint("token0_amount: ", token0_amount);
@@ -482,8 +502,8 @@ contract UniswapV3PositionTest is Test {
             int24 tick_lower = ticks[i][0];
             int24 tick_upper = ticks[i][1];
             (uint256 token0_amount, uint256 token1_amount) = getAmountByBestLiquidity(totalValue, farming_slot0.tick, tick_lower, tick_upper);
-            // emit log_named_uint("token0_amount: ", token0_amount);
-            // emit log_named_uint("token1_amount: ", token1_amount);
+            emit log_named_uint("token0_amount: ", token0_amount);
+            emit log_named_uint("token1_amount: ", token1_amount);
 
             INonfungiblePositionManager.MintParams memory params = INonfungiblePositionManager.MintParams({
                 token0: token0,
@@ -491,10 +511,10 @@ contract UniswapV3PositionTest is Test {
                 fee: fee,
                 tickLower: tick_lower,
                 tickUpper: tick_upper,
-                amount0Desired: token0_amount * 9 / 10,
-                amount1Desired: token1_amount * 9 / 10,
-                amount0Min: 0,         // Should set these to acceptable slippage values
-                amount1Min: 0,         // Should set these to acceptable slippage values
+                amount0Desired: token0_amount / 10,
+                amount1Desired: token1_amount / 10,
+                amount0Min: token0_amount * 95 / 100,         // Should set these to acceptable slippage values
+                amount1Min: token1_amount * 95 / 100,         // Should set these to acceptable slippage values
                 recipient: user_,
                 deadline: block.timestamp + 15 minutes
             });
@@ -507,7 +527,7 @@ contract UniswapV3PositionTest is Test {
             // emit log_named_uint("amount0: ", amount0);
             // emit log_named_uint("amount1: ", amount1);
             vm.stopPrank();
-            // break;
+            break;
         }
 
         // check balances
@@ -529,10 +549,17 @@ contract UniswapV3PositionTest is Test {
         emit log_named_uint("total_fees1: ", total_fees1);
     }
 
-    function test_getTotalPositionValue() public {
-        (uint256 total_amount0, uint256 total_amount1) = getTotalPositionValue();
-        emit log_named_uint("total_amount0: ", total_amount0);
-        emit log_named_uint("total_amount1: ", total_amount1);
-    }
+    // function test_getTotalPositionValue() public {
+    //     (uint256 total_amount0, uint256 total_amount1) = getTotalPositionValue();
+    //     emit log_named_uint("total_amount0: ", total_amount0);
+    //     emit log_named_uint("total_amount1: ", total_amount1);
+    // }
+
+    // function test_getPositionAmount() public {
+    //     uniswapV3Position = new UniswapV3Position();
+    //     (uint256 amount0, uint256 amount1) = uniswapV3Position.getPositionAmount(869910);
+    //     emit log_named_uint("amount0: ", amount0);
+    //     emit log_named_uint("amount1: ", amount1);
+    // }
 
 }

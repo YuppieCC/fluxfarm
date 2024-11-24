@@ -7,39 +7,39 @@ import {LiquidityAmounts} from '@uniswap/v3-periphery/contracts/libraries/Liquid
 
 library LiqAmountCalculator {
     function getFactor(
-        int24 tick_current,
-        int24 tick_lower,
-        int24 tick_upper,
-        uint256 token0_decimals,
-        uint256 token1_decimals
+        int24 tickCurrent_,
+        int24 tickLower_,
+        int24 tickUpper_,
+        uint256 token0Decimals_,
+        uint256 token1Decimals_
     ) external pure returns (uint256, uint256) {
-        if (tick_upper < tick_current) {
-            // token0_amount = 0
+        if (tickUpper_ < tickCurrent_) {
+            // token0Amount = 0
             return (0, 1e18);
         }
 
-        if (tick_lower > tick_current) {
-            // token1_amount = 0
+        if (tickLower_ > tickCurrent_) {
+            // token1Amount = 0
             return (1e18, 0);
         }
 
-        uint256 token0_unit = 10 ** token0_decimals;
-        uint256 token1_unit = 10 ** token1_decimals;
-        uint160 sqrtPriceX96_current = TickMath.getSqrtRatioAtTick(tick_current);
-        uint160 sqrtPriceX96_lower = TickMath.getSqrtRatioAtTick(tick_lower);
-        uint160 sqrtPriceX96_upper = TickMath.getSqrtRatioAtTick(tick_upper);
+        uint256 token0Unit = 10 ** token0Decimals_;
+        uint256 token1Unit = 10 ** token1Decimals_;
+        uint160 sqrtPriceX96_current = TickMath.getSqrtRatioAtTick(tickCurrent_);
+        uint160 sqrtPriceX96_lower = TickMath.getSqrtRatioAtTick(tickLower_);
+        uint160 sqrtPriceX96_upper = TickMath.getSqrtRatioAtTick(tickUpper_);
 
         uint128 liq_256 = LiquidityAmounts.getLiquidityForAmounts(
             sqrtPriceX96_current,
             sqrtPriceX96_lower,
             sqrtPriceX96_upper,
-            token0_unit,
-            token1_unit
+            token0Unit,
+            token1Unit
         );
         require(liq_256 <= type(uint128).max, "liq exceeds uint128 range");
         uint128 liq = uint128(liq_256);
 
-        (uint256 amount_0, uint256 amount_1) = LiquidityAmounts.getAmountsForLiquidity(
+        (uint256 amount0, uint256 amount1) = LiquidityAmounts.getAmountsForLiquidity(
             sqrtPriceX96_current,
             sqrtPriceX96_lower,
             sqrtPriceX96_upper,
@@ -47,40 +47,40 @@ library LiqAmountCalculator {
         );
 
         // trans to 1e18
-        amount_0 = amount_0 * 1e18 / token0_unit;
-        amount_1 = amount_1 * 1e18 / token1_unit;
-        return (1e18, amount_1 * 1e18 / amount_0);
+        amount0 = amount0 * 1e18 / token0Unit;
+        amount1 = amount1 * 1e18 / token1Unit;
+        return (1e18, amount1 * 1e18 / amount0);
     }
 
     function getAmountByBestLiquidity(
-        uint256 token0_factor,
-        uint256 token1_factor,
+        uint256 token0Factor_,
+        uint256 token1Factor_,
         uint256 totalValue_,
-        uint256 token0_decimals,
-        uint256 token1_decimals,
-        uint256 token0PriceIn18,
-        uint256 token1PriceIn18
+        uint256 token0Decimals_,
+        uint256 token1Decimals_,
+        uint256 token0PriceIn18_,
+        uint256 token1PriceIn18_
     ) public pure returns (uint256, uint256) {
         // why:
-        // token1_amount = token1_factor * token0_amount
-        // totalValue_ = token0_factor * token0_amount * token0PriceIn18 + token1_factor * token0_amount * token1PriceIn18
+        // token1Amount = token1Factor_ * token0Amount
+        // totalValue_ = token0Factor_ * token0Amount * token0PriceIn18_ + token1Factor_ * token0Amount * token1PriceIn18_
         // get: 
-        // token0_amount = totalValue_ / (token0_factor * token0PriceIn18 + token1PriceIn18 * token1_factor)
+        // token0Amount = totalValue_ / (token0Factor_ * token0PriceIn18_ + token1PriceIn18_ * token1Factor_)
 
-        uint256 token0_amount;
-        uint256 token1_amount;
-        if (token0_factor == 0) {
-            token0_amount = 0;
-            token1_amount = totalValue_ * 1e18 / token1PriceIn18;
-        } else if (token1_factor == 0) {
-            token0_amount = totalValue_ * 1e18 / token0PriceIn18;
-            token1_amount = 0;
+        uint256 token0Amount;
+        uint256 token1Amount;
+        if (token0Factor_ == 0) {
+            token0Amount = 0;
+            token1Amount = totalValue_ * 1e18 / token1PriceIn18_;
+        } else if (token1Factor_ == 0) {
+            token0Amount = totalValue_ * 1e18 / token0PriceIn18_;
+            token1Amount = 0;
         } else {
-            token0_amount = totalValue_ * 1e18 / (token0_factor * token0PriceIn18 / 1e18 + token1_factor * token1PriceIn18 / 1e18);
-            token1_amount = token0_amount * token1_factor / 1e18;
+            token0Amount = totalValue_ * 1e18 / (token0Factor_ * token0PriceIn18_ / 1e18 + token1Factor_ * token1PriceIn18_ / 1e18);
+            token1Amount = token0Amount * token1Factor_ / 1e18;
         }
 
-        return (token0_amount * 10 ** token0_decimals / 1e18, token1_amount * 10 ** token1_decimals / 1e18);
+        return (token0Amount * 10 ** token0Decimals_ / 1e18, token1Amount * 10 ** token1Decimals_ / 1e18);
     }
 
 }

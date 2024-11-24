@@ -5,6 +5,8 @@ pragma solidity >=0.5.0;
 /// @notice These methods compose the pool's state, and can change with any frequency including multiple times
 /// per transaction
 interface IUniswapV3PoolState {
+    function fee() external view returns (uint24);
+
     struct Slot0 {
         // the current price
         uint160 sqrtPriceX96;
