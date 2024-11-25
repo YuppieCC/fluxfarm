@@ -20,7 +20,10 @@ import {LiqAmountCalculator} from 'src/libraries/LiqAmountCalculator.sol';
 
 
 contract FluxFarm is UUPSUpgradeable, AccessControl, TokenTransfer, IERC721Receiver {
+    event Invest(address token_, uint256 amount_, uint256 price_, uint256 value_, uint256 newTotalInvest_);
+    event Withdraw(address token_, uint256 amount_, uint256 price_, uint256 value_, uint256 newTotalWithdraw_);
     event Harvest(uint256 totalAmount0_, uint256 totalAmount1_, uint256 totalFees0_, uint256 totalFees1_);
+    event ReBalanceToken(uint256 amount0_, uint256 amount1_);
     event SwapExactInputSingle(
         address tokenIn_,
         address tokenOut_,
@@ -29,7 +32,16 @@ contract FluxFarm is UUPSUpgradeable, AccessControl, TokenTransfer, IERC721Recei
         address recipient_,
         uint256 amountOut_
     );
-    event ReBalanceToken(uint256 amount0_, uint256 amount1_);
+    event InitialPosition(uint256 burnCount_);
+    event CloseAllPosition(
+        uint256 burnCount_,
+        uint256 totalAmount0_,
+        uint256 totalAmount1_,
+        uint256 totalFees0_,
+        uint256 totalFees1_,
+        uint256 nowBalanceToken0_,
+        uint256 nowBalanceToken1_
+    );
 
     INonfungiblePositionManager public positionManager;
     IUniswapV3PoolState public poolState;
@@ -40,6 +52,11 @@ contract FluxFarm is UUPSUpgradeable, AccessControl, TokenTransfer, IERC721Recei
     address public token1;
     address public token0Oracle;
     address public token1Oracle;
+    uint256 public totalInvestUsdValue;
+    uint256 public totalWithdrawUsdValue;
+
+    mapping(address => uint256) public tokenInvest;
+    mapping(address => uint256) public tokenWithdraw;
 
     struct FarmingInfo {
         uint256 tokenId;
@@ -290,6 +307,35 @@ contract FluxFarm is UUPSUpgradeable, AccessControl, TokenTransfer, IERC721Recei
         return (amount0_, amount1_);
     }
 
+    function _closePosition(uint256 tokenId_, uint128 liquidity_) internal returns (
+        uint256 amount0,
+        uint256 amount1,
+        uint256 fee0,
+        uint256 fee1
+    ) {
+        if (liquidity_ > 0) {
+            // decrease liquidity
+            (amount0, amount1) = positionManager.decreaseLiquidity(
+            INonfungiblePositionManager.DecreaseLiquidityParams({
+                tokenId: tokenId_,
+                liquidity: liquidity_,
+                amount0Min: 0,
+                amount1Min: 0,
+                    deadline: block.timestamp + 15 minutes
+                })
+            );
+        }
+
+        // collect
+        (fee0, fee1) = positionManager.collect(
+            INonfungiblePositionManager.CollectParams({
+                tokenId: tokenId_,
+                recipient: this_,
+                amount0Max: type(uint128).max,
+                amount1Max: type(uint128).max
+        }));
+    }
+
     function _harvestPosition(int24 tickCurrent_, uint256 tokenId_) internal returns (
         uint256 amount0,
         uint256 amount1,
@@ -300,30 +346,7 @@ contract FluxFarm is UUPSUpgradeable, AccessControl, TokenTransfer, IERC721Recei
 
         // out of range
         if (tickCurrent_ < tickLower || tickCurrent_ > tickUpper) {
-            // check liquidity
-            if (liquidity > 0) {
-                // decrease liquidity
-                (amount0, amount1) = positionManager.decreaseLiquidity(
-                    INonfungiblePositionManager.DecreaseLiquidityParams({
-                        tokenId: tokenId_,
-                        liquidity: liquidity,
-                        amount0Min: getAmountAfterSlippage(amount0, slippage),
-                        amount1Min: getAmountAfterSlippage(amount1, slippage),
-                        deadline: block.timestamp + 15 minutes
-                }));
-
-                // collect
-                (fee0, fee1) = positionManager.collect(
-                    INonfungiblePositionManager.CollectParams({
-                        tokenId: tokenId_,
-                        recipient: this_,
-                        amount0Max: type(uint128).max,
-                        amount1Max: type(uint128).max
-                }));
-                return (amount0, amount1, fee0, fee1);
-            }
-            // no liquidity, no need to harvest
-            return (0, 0, 0, 0);
+            return _closePosition(tokenId_, liquidity);
         }
 
         // in range and has liquidity
@@ -422,15 +445,15 @@ contract FluxFarm is UUPSUpgradeable, AccessControl, TokenTransfer, IERC721Recei
 
     function initialPosition(
         int24[][] memory ticks_,
-        uint256 totalValue_
-    ) external onlyRole(MANAGER) {
+        uint256 onePositionValue_
+    ) external onlyRole(MANAGER) returns (uint256 burnCount) {
         _updatePoolState();
         uint256 balanceBefore = IERC721(address(positionManager)).balanceOf(this_);
         for (uint256 i = 0; i < ticks_.length; i++) {
             int24 tickLower = ticks_[i][0];
             int24 tickUpper = ticks_[i][1];
             (uint256 token0Amount, uint256 token1Amount) = getAmountByBestLiquidity(
-                totalValue_,
+                onePositionValue_,
                 farmingSlot0.tick,
                 tickLower,
                 tickUpper
@@ -449,17 +472,107 @@ contract FluxFarm is UUPSUpgradeable, AccessControl, TokenTransfer, IERC721Recei
                 recipient: address(this),
                 deadline: block.timestamp + 15 minutes
             }));
+            
+            burnCount++;
         }
 
         // check balances
         uint256 balanceAfter = IERC721(address(positionManager)).balanceOf(this_);
         require(balanceAfter - balanceBefore == ticks_.length, "INVALID_POSITION_COUNT");
+
+        emit InitialPosition(burnCount);
     }
 
-    function addAssets(address token_, uint256 amount_) external onlyRole(DEFAULT_ADMIN_ROLE) renewPool returns (uint256) {
+    function closeAllPosition(bool isBurn_) external onlyRole(MANAGER) returns (
+        uint256 burnCount,
+        uint256 totalAmount0,
+        uint256 totalAmount1,
+        uint256 totalFees0,
+        uint256 totalFees1,
+        uint256 nowBalanceToken0,
+        uint256 nowBalanceToken1
+    ) {
+        uint256 balance = IERC721(address(positionManager)).balanceOf(this_);
+        uint256[] memory tokenIds = new uint256[](balance);
+
+        for (uint256 i = 0; i < balance; i++) {
+            uint256 tokenId = IERC721Enumerable(address(positionManager)).tokenOfOwnerByIndex(this_, i);
+            (,,,,,int24 tickLower,int24 tickUpper,uint128 liquidity,,,,) = positionManager.positions(tokenId);
+            (uint256 amount0, uint256 amount1, uint256 fee0, uint256 fee1) = _closePosition(tokenId, liquidity);
+            totalAmount0 += amount0;
+            totalAmount1 += amount1;
+            totalFees0 += fee0;
+            totalFees1 += fee1;
+            
+            tokenIds[i] = tokenId;  // prepare for burn
+        }
+
+        if (isBurn_) {
+            for (uint256 i = 0; i < balance; i++) {
+                positionManager.burn(tokenIds[i]);
+                burnCount++;
+            }
+        }
+
+        nowBalanceToken0 = IERC20(token0).balanceOf(this_);
+        nowBalanceToken1 = IERC20(token1).balanceOf(this_);
+        
+        emit CloseAllPosition(
+            burnCount,
+            totalAmount0,
+            totalAmount1,
+            totalFees0,
+            totalFees1,
+            nowBalanceToken0,
+            nowBalanceToken1
+        );
+    }
+
+    function invest(address token_, uint256 amount_) external onlyRole(MANAGER) renewPool returns (uint256) {
         require(token_ == token0 || token_ == token1, "INVALID_TOKEN");
+        uint256 tokenDecimals;
+        uint256 tokenPrice;
+
+        if (token_ == token0) {
+            tokenDecimals = token0Decimals;
+            tokenPrice = getPriceIn1e18(token0Oracle, token0OracleDeimals);
+        } else {
+            tokenDecimals = token1Decimals;
+            tokenPrice = getPriceIn1e18(token1Oracle, token1OracleDeimals);
+        }
+
         uint256 amountReceived = doTransferIn(token_, msg.sender, amount_);
-        return amountReceived;
+        uint256 tokenValue = amountReceived * tokenPrice / (10 ** tokenDecimals);
+
+        tokenInvest[token_] += amountReceived;
+        uint256 newTotalInvestUsdValue = totalInvestUsdValue + tokenValue;
+        require(newTotalInvestUsdValue > totalInvestUsdValue, "Amount Overflow");
+        totalInvestUsdValue = newTotalInvestUsdValue;
+        emit Invest(token_, amountReceived, tokenPrice, tokenValue, newTotalInvestUsdValue);
+        return tokenValue;
     }
 
+    function withdraw(address token_, uint256 amount_) external onlyRole(MANAGER) renewPool returns (uint256) {
+        require(token_ == token0 || token_ == token1, "INVALID_TOKEN");
+        uint256 tokenDecimals;
+        uint256 tokenPrice;
+
+        if (token_ == token0) {
+            tokenDecimals = token0Decimals;
+            tokenPrice = getPriceIn1e18(token0Oracle, token0OracleDeimals);
+        } else {
+            tokenDecimals = token1Decimals;
+            tokenPrice = getPriceIn1e18(token1Oracle, token1OracleDeimals);
+        }
+
+        uint256 amountWithdraw = doTransferOut(token_, msg.sender, amount_);
+        uint256 tokenValue = amountWithdraw * tokenPrice / (10 ** tokenDecimals);
+
+        tokenWithdraw[token_] += amountWithdraw;
+        uint256 newTotalWithdrawUsdValue = totalWithdrawUsdValue + tokenValue;
+        require(newTotalWithdrawUsdValue > totalWithdrawUsdValue, "Amount Overflow");
+        totalWithdrawUsdValue = newTotalWithdrawUsdValue;
+        emit Withdraw(token_, amountWithdraw, tokenPrice, tokenValue, totalWithdrawUsdValue);
+        return tokenValue;
+    }
 }

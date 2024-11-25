@@ -70,20 +70,28 @@ contract FluxFarmTest is Test {
             slippage
         );
 
-        IERC20(token0).transfer(address(fluxFarm), 1e6);
-        IERC20(token1).transfer(address(fluxFarm), IERC20(token1).balanceOf(user_));
-        fluxFarm.initialPosition(ticks_, 1e16);
+        IERC20(token0).transfer(address(fluxFarm), 2e6);
+        IERC20(token1).transfer(address(fluxFarm), 2e18);
+        uint256 burnCount = fluxFarm.initialPosition(ticks_, 1e16);
+        emit log_named_uint("InitialPosition tokenIds Length: ", burnCount);
         assertTrue(fluxFarm.getPositionBalance() == ticks_.length);
         vm.stopPrank();
     }
 
     function test_addAsset() public {
         vm.startPrank(user_);
-        // IERC20(token0).transfer(address(fluxFarm), IERC20(token0).balanceOf(user_));
-        // IERC20(token0).transfer(address(fluxFarm), IERC20(token0).balanceOf(user_));
-        IERC20(token0).approve(address(fluxFarm), 1e6);
-        fluxFarm.addAssets(token0, 1e6);
+        uint256 addToken0Amount = 2e6;
+        uint256 addToken1Amount = 2e18;
+
+        IERC20(token0).approve(address(fluxFarm), addToken0Amount);
+        fluxFarm.invest(token0, addToken0Amount);
         assertTrue(fluxFarm.getPositionBalance() == ticks_.length);
+        vm.warp(block.timestamp + 30 minutes);
+
+        IERC20(token1).approve(address(fluxFarm), addToken1Amount);
+        fluxFarm.invest(token1, addToken1Amount);
+        assertTrue(fluxFarm.getPositionBalance() == ticks_.length);
+
         vm.stopPrank();
     }
 
@@ -93,5 +101,37 @@ contract FluxFarmTest is Test {
 
         uint256 amount0OutMin = fluxFarm.getAmountOutMin(token1, token0, 1e18);
         emit log_named_uint("amount0OutMin: ", amount0OutMin);
+    }
+
+    function test_closeAllPosition() public {
+        vm.startPrank(user_);
+
+        uint256 addToken0Amount = 2e6;
+        uint256 addToken1Amount = 2e18;
+        IERC20(token0).approve(address(fluxFarm), addToken0Amount);
+        IERC20(token1).approve(address(fluxFarm), addToken1Amount);
+        fluxFarm.invest(token0, addToken0Amount);
+        fluxFarm.invest(token1, addToken1Amount);
+
+        vm.warp(block.timestamp + 180 minutes);
+        (
+            uint256 burnCount,
+            uint256 totalAmount0,
+            uint256 totalAmount1,
+            uint256 totalFees0,
+            uint256 totalFees1,
+            uint256 nowBalanceToken0,
+            uint256 nowBalanceToken1
+        ) = fluxFarm.closeAllPosition(true);
+        assertTrue(burnCount == ticks_.length);
+
+        emit log_named_uint("burnCount: ", burnCount);
+        emit log_named_uint("totalAmount0: ", totalAmount0);
+        emit log_named_uint("totalAmount1: ", totalAmount1);
+        emit log_named_uint("totalFees0: ", totalFees0);
+        emit log_named_uint("totalFees1: ", totalFees1);
+        emit log_named_uint("nowBalanceToken0: ", nowBalanceToken0);
+        emit log_named_uint("nowBalanceToken1: ", nowBalanceToken1);
+        vm.stopPrank();
     }
 }
