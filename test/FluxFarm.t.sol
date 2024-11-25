@@ -14,6 +14,7 @@ contract FluxFarmTest is Test {
     address public positionManagerAddress = 0xC36442b4a4522E871399CD717aBDD847Ab11FE88;
     address public swapRouterAddress = 0xE592427A0AEce92De3Edee1F18E0157C05861564;
     address public uniswapV3PoolAddress = 0xD1F1baD4c9E6c44DeC1e9bF3B94902205c5Cd6C3;
+    uint256 public slippage = 50000000000000000;
 
     address public token0 = 0x7F5c764cBc14f9669B88837ca1490cCa17c31607; // usdce
     address public token1 = 0xdC6fF44d5d932Cbd77B52E5612Ba0529DC6226F1; // wld
@@ -65,23 +66,32 @@ contract FluxFarmTest is Test {
             token0,
             token1,
             token0_oracle,
-            token1_oracle
+            token1_oracle,
+            slippage
         );
 
-        IERC20(token0).transfer(address(fluxFarm), IERC20(token0).balanceOf(user_));
+        IERC20(token0).transfer(address(fluxFarm), 1e6);
         IERC20(token1).transfer(address(fluxFarm), IERC20(token1).balanceOf(user_));
+        fluxFarm.initialPosition(ticks_, 1e16);
+        assertTrue(fluxFarm.getPositionBalance() == ticks_.length);
         vm.stopPrank();
     }
 
     function test_addAsset() public {
         vm.startPrank(user_);
-        IERC20(token0).transfer(address(fluxFarm), IERC20(token0).balanceOf(user_));
-        // IERC20(token1).transfer(address(fluxFarm), IERC20(token1).balanceOf(user_));
-
-        fluxFarm.initialPosition(ticks_, 1e16);
-
-        // IERC20(token0).approve(address(fluxFarm), 1e6);
-        // fluxFarm.addAssets(token0, 1e6);
+        // IERC20(token0).transfer(address(fluxFarm), IERC20(token0).balanceOf(user_));
+        // IERC20(token0).transfer(address(fluxFarm), IERC20(token0).balanceOf(user_));
+        IERC20(token0).approve(address(fluxFarm), 1e6);
+        fluxFarm.addAssets(token0, 1e6);
+        assertTrue(fluxFarm.getPositionBalance() == ticks_.length);
         vm.stopPrank();
+    }
+
+    function test_getAmountOutMin() public {
+        uint256 amount1OutMin = fluxFarm.getAmountOutMin(token0, token1, 1e6);
+        emit log_named_uint("amount1OutMin: ", amount1OutMin);
+
+        uint256 amount0OutMin = fluxFarm.getAmountOutMin(token1, token0, 1e18);
+        emit log_named_uint("amount0OutMin: ", amount0OutMin);
     }
 }
