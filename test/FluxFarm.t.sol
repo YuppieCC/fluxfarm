@@ -179,7 +179,7 @@ contract FluxFarmTest is Test {
     function test_metUpdateTrigger() public {
         vm.startPrank(user_);
         fluxFarm.updateFarm();
-        bool trigger = fluxFarm.metUpdateTrigger();
+        bool trigger = fluxFarm.updateFarmTrigger();
         assertEq(trigger, false);
         vm.stopPrank();
     }

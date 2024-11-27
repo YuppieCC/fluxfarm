@@ -12,6 +12,7 @@ docs/
 
 # lib
 lib/
+logs/
 
 # Dotenv file
 !.env.example

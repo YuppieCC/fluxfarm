@@ -54,6 +54,7 @@ scripting:
 		--optimizer-runs 200 \
 		--broadcast \
 		--verify \
+		--via-ir \
 		--etherscan-api-key ${ETHERSCAN_KEY} \
 		--private-key ${PRIVATE_KEY} \
 		--gas-price 500000 \

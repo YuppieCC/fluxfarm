@@ -119,6 +119,7 @@ contract FluxFarm is UUPSUpgradeable, AccessControl, TokenTransfer, IERC721Recei
     modifier renewFarm(){
         _updatePrice();
         _updatePoolState();
+        _updateFarmingInfo();
         _harvest();
         _;
         _reinvest();
@@ -247,7 +248,7 @@ contract FluxFarm is UUPSUpgradeable, AccessControl, TokenTransfer, IERC721Recei
 
     /// @inheritdoc IFluxFarm
     function getAllPositionFees() public view returns (uint256 totalFees0, uint256 totalFees1) {
-        uint256 balance = IERC721(address(positionManager)).balanceOf(this_);
+        uint256 balance = getPositionBalance();
         for (uint256 i = 0; i < balance; i++) {
             uint256 tokenId = IERC721Enumerable(address(positionManager)).tokenOfOwnerByIndex(this_, i);
             (uint256 fees0, uint256 fees1) = getPositionFee(tokenId);
@@ -349,6 +350,23 @@ contract FluxFarm is UUPSUpgradeable, AccessControl, TokenTransfer, IERC721Recei
             balance0: IERC20(token0).balanceOf(this_),
             balance1: IERC20(token1).balanceOf(this_)
         });
+    }
+
+    /**
+    * @notice update the pool slot0 before update the farming info
+    */
+    function _updateFarmingInfo() internal {
+        uint256 balance = getPositionBalance();
+        for (uint256 i = 0; i < balance; i++) {
+            uint256 tokenId = IERC721Enumerable(address(positionManager)).tokenOfOwnerByIndex(this_, i);
+            (,,,,,int24 tickLower,int24 tickUpper,uint128 liquidity,,,,) = positionManager.positions(tokenId);
+            if (farmingSlot0.tick >= tickLower && farmingSlot0.tick <= tickUpper) {
+                farmingInfo.tokenId = tokenId;
+                farmingInfo.tickLower = tickLower;
+                farmingInfo.tickUpper = tickUpper;
+                break;
+            }
+        }
     }
 
     /**
@@ -458,16 +476,13 @@ contract FluxFarm is UUPSUpgradeable, AccessControl, TokenTransfer, IERC721Recei
         (,,,,,int24 tickLower,int24 tickUpper,uint128 liquidity,,,,) = positionManager.positions(tokenId_);
 
         // out of range
-        if (tickCurrent_ < tickLower || tickCurrent_ > tickUpper) {
+        if (tokenId_ != farmingInfo.tokenId) {
             return _closePosition(tokenId_, liquidity);
         }
 
         // in range and has liquidity
         if (liquidity > 0) {
             // collect fee
-            farmingInfo.tokenId = tokenId_;
-            farmingInfo.tickLower = tickLower;
-            farmingInfo.tickUpper = tickUpper;
             (fee0, fee1) = positionManager.collect(
                 INonfungiblePositionManager.CollectParams({
                     tokenId: tokenId_,
@@ -490,7 +505,7 @@ contract FluxFarm is UUPSUpgradeable, AccessControl, TokenTransfer, IERC721Recei
         uint256 totalFees0;
         uint256 totalFees1;
 
-        uint256 balance = IERC721(address(positionManager)).balanceOf(this_);
+        uint256 balance = getPositionBalance();
         for (uint256 i = 0; i < balance; i++) {
             uint256 tokenId = IERC721Enumerable(address(positionManager)).tokenOfOwnerByIndex(this_, i);
             // harvest
@@ -611,7 +626,7 @@ contract FluxFarm is UUPSUpgradeable, AccessControl, TokenTransfer, IERC721Recei
         _updatePoolState();
         _updatePrice();
 
-        uint256 balanceBefore = IERC721(address(positionManager)).balanceOf(this_);
+        uint256 balanceBefore = getPositionBalance();
         require(balanceBefore == 0, "ALREADY_INITIAL_POSITION");
 
         for (uint256 i = 0; i < ticks_.length; i++) {
@@ -640,7 +655,7 @@ contract FluxFarm is UUPSUpgradeable, AccessControl, TokenTransfer, IERC721Recei
         }
 
         // check balances
-        uint256 balanceAfter = IERC721(address(positionManager)).balanceOf(this_);
+        uint256 balanceAfter = getPositionBalance();
         require(balanceAfter - balanceBefore == ticks_.length, "INVALID_POSITION_COUNT");
 
         emit InitialPosition(ticks_.length);
@@ -657,7 +672,7 @@ contract FluxFarm is UUPSUpgradeable, AccessControl, TokenTransfer, IERC721Recei
         uint256 nowBalanceToken0,
         uint256 nowBalanceToken1
     ) {
-        uint256 balance = IERC721(address(positionManager)).balanceOf(this_);
+        uint256 balance = getPositionBalance();
         uint256[] memory tokenIds = new uint256[](balance);
 
         for (uint256 i = 0; i < balance; i++) {
