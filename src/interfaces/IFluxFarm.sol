@@ -2,6 +2,11 @@
 pragma solidity ^0.8.13;
 
 interface IFluxFarm {
+    /**
+    * @notice check the update trigger.
+    * @return bool
+    */
+    function updateFarmTrigger() external view returns (bool);
 
     /**
     * @notice check the position balance.
@@ -112,4 +117,10 @@ interface IFluxFarm {
     * @param slippage_ uint256
     */
     function setSlippage(uint256 slippage_) external;
+
+    /**
+    * @notice update the farm.
+    * @return bool
+    */
+    function updateFarm() external returns (bool);
 }

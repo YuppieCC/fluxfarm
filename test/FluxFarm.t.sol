@@ -169,4 +169,18 @@ contract FluxFarmTest is Test {
         emit log_named_uint("nowBalanceToken1: ", nowBalanceToken1);
         vm.stopPrank();
     }
+
+    function test_updateFarm() public {
+        vm.startPrank(user_);
+        fluxFarm.updateFarm();
+        vm.stopPrank();
+    }
+
+    function test_metUpdateTrigger() public {
+        vm.startPrank(user_);
+        fluxFarm.updateFarm();
+        bool trigger = fluxFarm.metUpdateTrigger();
+        assertEq(trigger, false);
+        vm.stopPrank();
+    }
 }

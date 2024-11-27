@@ -25,6 +25,7 @@ contract FluxFarm is UUPSUpgradeable, AccessControl, TokenTransfer, IERC721Recei
     event Withdraw(address token_, uint256 amount_, uint256 price_, uint256 value_, uint256 newTotalWithdraw_);
     event Harvest(uint256 totalAmount0_, uint256 totalAmount1_, uint256 totalFees0_, uint256 totalFees1_);
     event Reinvest(uint256 tokenId_, uint256 liquidity_, uint256 amount0_, uint256 amount1_);
+    event UpdateFarm(address msgSender_, uint256 timestamp_, uint256 blockNumber_);
     event ReBalanceToken(uint256 amount0_, uint256 amount1_);
     event SwapExactInputSingle(
         address tokenIn_,
@@ -170,6 +171,18 @@ contract FluxFarm is UUPSUpgradeable, AccessControl, TokenTransfer, IERC721Recei
     /// @inheritdoc IFluxFarm
     function getPositionBalance() public view returns (uint256) {
         return IERC721(address(positionManager)).balanceOf(this_);
+    }
+
+    /// @inheritdoc IFluxFarm
+    function updateFarmTrigger() public view returns (bool) {
+        // get tick from slot0
+        (,int24 tick,,,,,) = poolState.slot0();
+
+        // check the tick is out of range
+        if (tick < farmingInfo.tickLower || tick > farmingInfo.tickUpper) {
+            return true;
+        }
+        return false;
     }
 
     /// @inheritdoc IFluxFarm
@@ -597,7 +610,7 @@ contract FluxFarm is UUPSUpgradeable, AccessControl, TokenTransfer, IERC721Recei
     ) external onlyRole(MANAGER) returns (uint256) {
         _updatePoolState();
         _updatePrice();
-        
+
         uint256 balanceBefore = IERC721(address(positionManager)).balanceOf(this_);
         require(balanceBefore == 0, "ALREADY_INITIAL_POSITION");
 
@@ -712,5 +725,11 @@ contract FluxFarm is UUPSUpgradeable, AccessControl, TokenTransfer, IERC721Recei
 
         emit Withdraw(token_, amountWithdraw, tokenPrice, tokenValue, totalWithdrawUsdValue);
         return tokenValue;
+    }
+
+    /// @inheritdoc IFluxFarm
+    function updateFarm() external onlyRole(MANAGER) renewFarm returns (bool) {
+        emit UpdateFarm(msg.sender, block.timestamp, block.number);
+        return true;
     }
 }
