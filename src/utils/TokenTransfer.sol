@@ -72,8 +72,9 @@ contract TokenTransfer is ReentrancyGuardUpgradeable {
         return balanceBefore - balanceAfter;  // underflow already checked above, just subtract
     }
 
-    function safeTransferETH(address to, uint256 value) internal {
-        (bool success, ) = to.call{value: value}(new bytes(0));
+    function safeTransferETH(address to, uint256 amount_) internal {
+        require(address(this).balance >= amount_, "Insufficient ETH balance");
+        (bool success, ) = to.call{value: amount_}(new bytes(0));
         require(success, 'TransferHelper::safeTransferETH: ETH transfer failed');
     }
 }

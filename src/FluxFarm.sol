@@ -17,9 +17,10 @@ import {INonfungiblePositionManager} from '@uniswap/v3-periphery/contracts/inter
 import {TokenTransfer} from 'src/utils/TokenTransfer.sol';
 import {UniswapV3PositionHelper} from 'src/libraries/UniswapV3PositionHelper.sol';
 import {LiqAmountCalculator} from 'src/libraries/LiqAmountCalculator.sol';
+import {IFluxFarm} from 'src/interfaces/IFluxFarm.sol';
 
 
-contract FluxFarm is UUPSUpgradeable, AccessControl, TokenTransfer, IERC721Receiver {
+contract FluxFarm is UUPSUpgradeable, AccessControl, TokenTransfer, IERC721Receiver, IFluxFarm {
     event Invest(address token_, uint256 amount_, uint256 price_, uint256 value_, uint256 newTotalInvest_);
     event Withdraw(address token_, uint256 amount_, uint256 price_, uint256 value_, uint256 newTotalWithdraw_);
     event Harvest(uint256 totalAmount0_, uint256 totalAmount1_, uint256 totalFees0_, uint256 totalFees1_);
@@ -33,7 +34,7 @@ contract FluxFarm is UUPSUpgradeable, AccessControl, TokenTransfer, IERC721Recei
         address recipient_,
         uint256 amountOut_
     );
-    event InitialPosition(uint256 burnCount_);
+    event InitialPosition(uint256 positionCount_);
     event CloseAllPosition(
         uint256 burnCount_,
         uint256 totalAmount0_,
@@ -49,6 +50,7 @@ contract FluxFarm is UUPSUpgradeable, AccessControl, TokenTransfer, IERC721Recei
     ISwapRouter public swapRouter;
 
     address public this_;
+    address public receiver;
     address public token0;
     address public token1;
     address public token0Oracle;
@@ -137,6 +139,7 @@ contract FluxFarm is UUPSUpgradeable, AccessControl, TokenTransfer, IERC721Recei
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
         _grantRole(MANAGER, msg.sender);
         _grantRole(SAFE_ADMIN, msg.sender);
+        receiver = msg.sender;
 
         this_ = address(this);
         token0 = token0_;
@@ -164,33 +167,12 @@ contract FluxFarm is UUPSUpgradeable, AccessControl, TokenTransfer, IERC721Recei
         IERC20(token1).approve(address(swapRouterAddress_), type(uint256).max);
     }
 
-    function swapExactInputSingle(
-        address tokenIn_,
-        address tokenOut_,
-        uint256 amountIn_,
-        address recipient_
-    ) internal returns (uint256) {
-        IERC20(tokenIn_).approve(address(swapRouter), amountIn_);
-        uint256 amountOutMin = getAmountOutMin(tokenIn_, tokenOut_, amountIn_);
-        ISwapRouter.ExactInputSingleParams memory params = ISwapRouter.ExactInputSingleParams({
-            tokenIn: tokenIn_,
-            tokenOut: tokenOut_,
-            fee: fee,
-            recipient: recipient_,
-            deadline: block.timestamp + 1000,
-            amountIn: amountIn_,
-            amountOutMinimum: amountOutMin,
-            sqrtPriceLimitX96: 0
-        });
-        uint256 amountOut = swapRouter.exactInputSingle(params);
-        emit SwapExactInputSingle(tokenIn_, tokenOut_, amountIn_, amountOutMin, recipient_, amountOut);
-        return amountOut;
-    }
-
+    /// @inheritdoc IFluxFarm
     function getPositionBalance() public view returns (uint256) {
         return IERC721(address(positionManager)).balanceOf(this_);
     }
 
+    /// @inheritdoc IFluxFarm
     function getPositionFee(uint256 tokenId_) public view returns (uint256, uint256) {
         (
             ,,,,,
@@ -218,16 +200,19 @@ contract FluxFarm is UUPSUpgradeable, AccessControl, TokenTransfer, IERC721Recei
         return (fees0, fees1);
     }
 
+    /// @inheritdoc IFluxFarm
     function getPriceIn1e18(address oracle_, uint256 decimals_) public view returns (uint256) {
         (, int price, , , ) = IEACAggregatorProxy(oracle_).latestRoundData();  // price is in 1e8
         require(price > 0, "Invalid price data");
         return uint256(price) * 1e18 / (10 ** decimals_);
     }
 
+    /// @inheritdoc IFluxFarm
     function getAmountAfterSlippage(uint256 amount_, uint256 slippage_) public pure returns (uint256) {
         return amount_ * (1e18 - slippage_) / 1e18;
     }
 
+    /// @inheritdoc IFluxFarm
     function getAmountOutMin(address tokenIn_, address tokenOut_, uint256 amountIn_) public view returns (uint256) {
         if (tokenIn_ == token0 && tokenOut_ == token1) {
             uint256 amountIn_1e18 = amountIn_ * 1e18 / (10 ** token0Decimals);
@@ -247,15 +232,7 @@ contract FluxFarm is UUPSUpgradeable, AccessControl, TokenTransfer, IERC721Recei
         revert("INVALID_TOKEN");
     }
 
-    function getPositionValue(uint256 token0Amount_, uint256 token1Amount_) public view returns (uint256) {
-        uint256 token0PriceIn18 = getPriceIn1e18(token0Oracle, token0OracleDeimals);
-        uint256 token1PriceIn18 = getPriceIn1e18(token1Oracle, token1OracleDeimals);
-
-        uint256 token0Value = token0Amount_ * token0PriceIn18 / (10 ** token0Decimals);
-        uint256 token1Value = token1Amount_ * token1PriceIn18 / (10 ** token1Decimals);
-        return token0Value + token1Value;
-    }
-
+    /// @inheritdoc IFluxFarm
     function getAllPositionFees() public view returns (uint256 totalFees0, uint256 totalFees1) {
         uint256 balance = IERC721(address(positionManager)).balanceOf(this_);
         for (uint256 i = 0; i < balance; i++) {
@@ -267,13 +244,20 @@ contract FluxFarm is UUPSUpgradeable, AccessControl, TokenTransfer, IERC721Recei
         return (totalFees0, totalFees1);        
     }
 
+    /// @inheritdoc IFluxFarm
     function getAmountByBestLiquidity(
         uint256 totalValue_,
         int24 tickCurrent_,
         int24 tickLower_,
         int24 tickUpper_
     ) public view returns (uint256, uint256) {
-        (uint256 token0_factor, uint256 token1_factor) = LiqAmountCalculator.getFactor(tickCurrent_, tickLower_, tickUpper_, token0Decimals, token1Decimals);
+        (uint256 token0_factor, uint256 token1_factor) = LiqAmountCalculator.getFactor(
+            tickCurrent_,
+            tickLower_,
+            tickUpper_,
+            token0Decimals,
+            token1Decimals
+        );
 
         return LiqAmountCalculator.getAmountByBestLiquidity(
             token0_factor,
@@ -281,26 +265,70 @@ contract FluxFarm is UUPSUpgradeable, AccessControl, TokenTransfer, IERC721Recei
             totalValue_,
             token0Decimals,
             token1Decimals,
-            getPriceIn1e18(token0Oracle, token0OracleDeimals),
-            getPriceIn1e18(token1Oracle, token1OracleDeimals)
+            token0Price,
+            token1Price
         );
     }
 
+    /**
+    * @notice swap token with exact input single
+    */
+    function _swapExactInputSingle(
+        address tokenIn_,
+        address tokenOut_,
+        uint256 amountIn_,
+        address recipient_
+    ) internal returns (uint256) {
+        IERC20(tokenIn_).approve(address(swapRouter), amountIn_);
+        uint256 amountOutMin = getAmountOutMin(tokenIn_, tokenOut_, amountIn_);
+        ISwapRouter.ExactInputSingleParams memory params = ISwapRouter.ExactInputSingleParams({
+            tokenIn: tokenIn_,
+            tokenOut: tokenOut_,
+            fee: fee,
+            recipient: recipient_,
+            deadline: block.timestamp + 1000,
+            amountIn: amountIn_,
+            amountOutMinimum: amountOutMin,
+            sqrtPriceLimitX96: 0
+        });
+        uint256 amountOut = swapRouter.exactInputSingle(params);
+        emit SwapExactInputSingle(tokenIn_, tokenOut_, amountIn_, amountOutMin, recipient_, amountOut);
+        return amountOut;
+    }
+
+    /**
+    * @notice get the value of position
+    * @param token0Amount_ uint256
+    * @param token1Amount_ uint256
+    * @return value
+    */
+    function _getPositionValue(uint256 token0Amount_, uint256 token1Amount_) internal view returns (uint256) {
+        // upadte price before calculate the value of position 
+        uint256 token0Value = token0Amount_ * token0Price / (10 ** token0Decimals);
+        uint256 token1Value = token1Amount_ * token1Price / (10 ** token1Decimals);
+        return token0Value + token1Value;
+    }
+
+    /**
+    * @notice update the token0 and token1 price, transfer the price from oracle(1e8) to 1e18
+    */
     function _updatePrice() internal {
         token0Price = getPriceIn1e18(token0Oracle, token0OracleDeimals);
         token1Price = getPriceIn1e18(token1Oracle, token1OracleDeimals);
     }
 
-    function _snapshot(uint128 liquidity, uint256 amount0, uint256 amount1) internal {
-        uint256 nowBalance0 = IERC20(token0).balanceOf(this_);
-        uint256 nowBalance1 = IERC20(token1).balanceOf(this_);
-
+    /**
+    * @notice snapshot the position info
+    * @param amount0_ uint256
+    * @param amount1_ uint256
+    */
+    function _snapshot(uint256 amount0_, uint256 amount1_) internal {
         SnapshotCount++;
         snapshotInfo[SnapshotCount] = Snapshot({
             timestamp: block.timestamp,
             tokenId: farmingInfo.tokenId,
-            amount0:  amount0,
-            amount1:  amount1,
+            amount0:  amount0_,
+            amount1:  amount1_,
             sqrtPriceX96: farmingSlot0.sqrtPriceX96,
             tickCurrent:  farmingSlot0.tick,
             price0: token0Price,
@@ -310,6 +338,9 @@ contract FluxFarm is UUPSUpgradeable, AccessControl, TokenTransfer, IERC721Recei
         });
     }
 
+    /**
+    * @notice update the pool state
+    */
     function _updatePoolState() internal {
         (
             farmingSlot0.sqrtPriceX96,
@@ -322,6 +353,14 @@ contract FluxFarm is UUPSUpgradeable, AccessControl, TokenTransfer, IERC721Recei
         ) = poolState.slot0();
     }
 
+    /**
+    * @notice swap token if the amount of token0 or token1 is not enough
+    * @param amount0_ uint256
+    * @param amount1_ uint256
+    * @param amount0Target_ uint256
+    * @param amount1Target_ uint256
+    * @return amount0Out, amount1Out
+    */
     function _swapToken(
         uint256 amount0_,
         uint256 amount1_,
@@ -331,7 +370,7 @@ contract FluxFarm is UUPSUpgradeable, AccessControl, TokenTransfer, IERC721Recei
         if (amount0_ > amount0Target_) {
             // swap token0 to token1
             uint256 amount0Swap = amount0_ - amount0Target_;
-            uint256 amount1Result = swapExactInputSingle(
+            uint256 amount1Result = _swapExactInputSingle(
                 token0,
                 token1,
                 amount0Swap,
@@ -344,7 +383,7 @@ contract FluxFarm is UUPSUpgradeable, AccessControl, TokenTransfer, IERC721Recei
         if (amount1_ > amount1Target_) {
             // swap token1 to token0
             uint256 amount1Swap = amount1_ - amount1Target_;
-            uint256 amount0Result = swapExactInputSingle(
+            uint256 amount0Result = _swapExactInputSingle(
                 token1,
                 token0,
                 amount1Swap,
@@ -358,6 +397,11 @@ contract FluxFarm is UUPSUpgradeable, AccessControl, TokenTransfer, IERC721Recei
         return (amount0_, amount1_);
     }
 
+    /**
+    * @notice close the position, decrease liquidity if has liquidity and collect the fee
+    * @param tokenId_ uint256
+    * @param liquidity_ uint128
+    */
     function _closePosition(uint256 tokenId_, uint128 liquidity_) internal returns (
         uint256 amount0,
         uint256 amount1,
@@ -387,6 +431,11 @@ contract FluxFarm is UUPSUpgradeable, AccessControl, TokenTransfer, IERC721Recei
         }
     }
 
+    /**
+    * @notice harvest the position, close position if out of range, collect the fee if has liquidity and position in range
+    * @param tickCurrent_ int24
+    * @param tokenId_ uint256
+    */
     function _harvestPosition(int24 tickCurrent_, uint256 tokenId_) internal returns (
         uint256 amount0,
         uint256 amount1,
@@ -419,6 +468,9 @@ contract FluxFarm is UUPSUpgradeable, AccessControl, TokenTransfer, IERC721Recei
         return (0, 0, 0, 0);
     }
 
+    /**
+    * @notice harvest all positions
+    */
     function _harvest() internal {
         uint256 totalAmount0;
         uint256 totalAmount1;
@@ -445,11 +497,15 @@ contract FluxFarm is UUPSUpgradeable, AccessControl, TokenTransfer, IERC721Recei
         emit Harvest(totalAmount0, totalAmount1, totalFees0, totalFees1);
     }
 
+    /**
+    * @notice rebalance the token0 and token1 balance
+    * @return token0Balance, token1Balance
+    */
     function _rebalanceToken() internal returns (uint256, uint256) {
         uint256 token0Balance = IERC20(token0).balanceOf(this_);
         uint256 token1Balance = IERC20(token1).balanceOf(this_);
         
-        uint256 totalValue = getPositionValue(
+        uint256 totalValue = _getPositionValue(
             token0Balance,
             token1Balance
         );
@@ -467,6 +523,10 @@ contract FluxFarm is UUPSUpgradeable, AccessControl, TokenTransfer, IERC721Recei
         return (IERC20(token0).balanceOf(this_), IERC20(token1).balanceOf(this_));
     }
 
+    /**
+    * @notice reinvest the token, rebalance the token0 and token1 balance, increase liquidity if has position, snapshot the position info
+    * @return liquidity, amount0, amount1
+    */
     function _reinvest() internal returns (uint128, uint256, uint256) {
         if (farmingInfo.tokenId == 0) {
             return (0, 0, 0);
@@ -486,12 +546,16 @@ contract FluxFarm is UUPSUpgradeable, AccessControl, TokenTransfer, IERC721Recei
             })
         );
 
-        _snapshot(liquidity, amount0, amount1);
+        _snapshot(amount0, amount1);
        
         emit Reinvest(farmingInfo.tokenId, liquidity, amount0, amount1);
         return (liquidity, amount0, amount1);
     }
 
+    /**
+    * @notice get the token info, returns the decimals and price
+    * @param token_ address
+    */
     function _getTokenInfo(address token_) internal view returns (
         uint256 tokenDecimals,
         uint256 tokenPrice
@@ -505,18 +569,38 @@ contract FluxFarm is UUPSUpgradeable, AccessControl, TokenTransfer, IERC721Recei
         }
     }
 
+    /// @inheritdoc IFluxFarm
     function setSlippage(uint256 slippage_) external onlyRole(MANAGER) {
         require(slippage_ > 0 && slippage_ < 1e18, "INVALID_SLIPPAGE");
         slippage = slippage_;
     }
 
+    /// @inheritdoc IFluxFarm
+    function setReceiver(address receiver_) external onlyRole(SAFE_ADMIN) {
+        receiver = receiver_;
+    }
+
+    /// @inheritdoc IFluxFarm
+    function claimTokens(address token_, address to_, uint256 amount_) external onlyRole(SAFE_ADMIN) {
+        require(to_ == receiver, "INVALID_RECEIVER");
+        if (token_ == address(0)) {
+            safeTransferETH(receiver, amount_);
+        } else {
+            doTransferOut(token_, receiver, amount_);
+        }
+    }
+
+    /// @inheritdoc IFluxFarm
     function initialPosition(
         int24[][] memory ticks_,
         uint256 onePositionValue_
-    ) external onlyRole(MANAGER) returns (uint256 burnCount) {
+    ) external onlyRole(MANAGER) returns (uint256) {
         _updatePoolState();
         _updatePrice();
+        
         uint256 balanceBefore = IERC721(address(positionManager)).balanceOf(this_);
+        require(balanceBefore == 0, "ALREADY_INITIAL_POSITION");
+
         for (uint256 i = 0; i < ticks_.length; i++) {
             int24 tickLower = ticks_[i][0];
             int24 tickUpper = ticks_[i][1];
@@ -537,20 +621,20 @@ contract FluxFarm is UUPSUpgradeable, AccessControl, TokenTransfer, IERC721Recei
                 amount1Desired: token1Amount,
                 amount0Min: getAmountAfterSlippage(token0Amount, slippage),
                 amount1Min: getAmountAfterSlippage(token1Amount, slippage),
-                recipient: address(this),
+                recipient: this_,
                 deadline: block.timestamp + 15 minutes
-            }));
-            
-            burnCount++;
+            }));            
         }
 
         // check balances
         uint256 balanceAfter = IERC721(address(positionManager)).balanceOf(this_);
         require(balanceAfter - balanceBefore == ticks_.length, "INVALID_POSITION_COUNT");
 
-        emit InitialPosition(burnCount);
+        emit InitialPosition(ticks_.length);
+        return ticks_.length;
     }
 
+    /// @inheritdoc IFluxFarm
     function closeAllPosition(bool isBurn_) external onlyRole(MANAGER) returns (
         uint256 burnCount,
         uint256 totalAmount0,
@@ -565,7 +649,7 @@ contract FluxFarm is UUPSUpgradeable, AccessControl, TokenTransfer, IERC721Recei
 
         for (uint256 i = 0; i < balance; i++) {
             uint256 tokenId = IERC721Enumerable(address(positionManager)).tokenOfOwnerByIndex(this_, i);
-            (,,,,,int24 tickLower,int24 tickUpper,uint128 liquidity,,,,) = positionManager.positions(tokenId);
+            (,,,,,,,uint128 liquidity,,,,) = positionManager.positions(tokenId);
             (uint256 amount0, uint256 amount1, uint256 fee0, uint256 fee1) = _closePosition(tokenId, liquidity);
             totalAmount0 += amount0;
             totalAmount1 += amount1;
@@ -596,6 +680,7 @@ contract FluxFarm is UUPSUpgradeable, AccessControl, TokenTransfer, IERC721Recei
         );
     }
 
+    /// @inheritdoc IFluxFarm
     function invest(address token_, uint256 amount_) external onlyRole(MANAGER) renewFarm returns (uint256) {
         require(token_ == token0 || token_ == token1, "INVALID_TOKEN");
         (uint256 tokenDecimals, uint256 tokenPrice) = _getTokenInfo(token_);
@@ -612,7 +697,8 @@ contract FluxFarm is UUPSUpgradeable, AccessControl, TokenTransfer, IERC721Recei
         return tokenValue;
     }
 
-    function withdraw(address token_, uint256 amount_) external onlyRole(MANAGER) renewFarm returns (uint256) {
+    /// @inheritdoc IFluxFarm
+    function withdraw(address token_, uint256 amount_) external onlyRole(SAFE_ADMIN) renewFarm returns (uint256) {
         require(token_ == token0 || token_ == token1, "INVALID_TOKEN");
         (uint256 tokenDecimals, uint256 tokenPrice) = _getTokenInfo(token_);
 

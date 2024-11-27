@@ -116,6 +116,20 @@ contract FluxFarmTest is Test {
         vm.stopPrank();
     }
 
+    function test_claimTokens() public {
+        vm.deal(address(fluxFarm), 100e18);
+        vm.startPrank(user_);
+        uint256 ethBalance = address(user_).balance;
+        fluxFarm.claimTokens(address(0), user_, 100e18);
+        assertTrue(address(user_).balance - ethBalance == 100e18);
+
+        IERC20(token0).transfer(address(fluxFarm), 1e6);
+        uint256 token0Balance = IERC20(token0).balanceOf(user_);
+        fluxFarm.claimTokens(token0, user_, 1e6);
+        assertTrue(IERC20(token0).balanceOf(user_) - token0Balance == 1e6);
+        vm.stopPrank();
+    }
+
     function test_getAmountOutMin() public {
         uint256 amount1OutMin = fluxFarm.getAmountOutMin(token0, token1, 1e6);
         emit log_named_uint("amount1OutMin: ", amount1OutMin);

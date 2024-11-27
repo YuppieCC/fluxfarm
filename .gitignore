@@ -14,4 +14,8 @@ docs/
 lib/
 
 # Dotenv file
-.env
+!.env.example
+.env.op
+
+*.json
+*.xlsx
