@@ -90,6 +90,27 @@ contract FluxFarmTest is Test {
 
         IERC20(token1).approve(address(fluxFarm), addToken1Amount);
         fluxFarm.invest(token1, addToken1Amount);
+        (
+            uint256 snapshot_timestamp,
+            uint256 snapshot_tokenId,
+            uint256 snapshot_amount0,
+            uint256 snapshot_amount1,
+            uint160 snapshot_sqrtPriceX96,
+            int24 snapshot_tickCurrent,
+            uint256 snapshot_price0,
+            uint256 snapshot_price1,
+            uint256 snapshot_balance0,
+            uint256 snapshot_balance1
+        ) = fluxFarm.snapshotInfo(1);
+        emit log_named_uint("snapshot.timestamp: ", snapshot_timestamp);
+        emit log_named_uint("snapshot.tokenId: ", snapshot_tokenId);
+        emit log_named_int("snapshot.tickCurrent: ", snapshot_tickCurrent);
+        emit log_named_uint("snapshot.amount0: ", snapshot_amount0);
+        emit log_named_uint("snapshot.amount1: ", snapshot_amount1);
+        emit log_named_uint("snapshot.price0: ", snapshot_price0);
+        emit log_named_uint("snapshot.price1: ", snapshot_price1);
+        emit log_named_uint("snapshot.balance0: ", snapshot_balance0);
+        emit log_named_uint("snapshot.balance1: ", snapshot_balance1);
         assertTrue(fluxFarm.getPositionBalance() == ticks_.length);
 
         vm.stopPrank();
