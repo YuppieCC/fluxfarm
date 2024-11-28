@@ -5,6 +5,7 @@ VERITY_CONSTRUCTOR_ARGS ?=
 VERIFY_CONTRACT ?=
 TEST_CONTRACT ?=
 GUID ?=
+# include .env.arbitrum_sepolia
 include .env.op
 
 testall:

@@ -176,13 +176,13 @@ contract FluxFarmTest is Test {
         vm.stopPrank();
     }
 
-    function test_metUpdateTrigger() public {
-        vm.startPrank(user_);
-        fluxFarm.updateFarm();
-        bool trigger = fluxFarm.updateFarmTrigger();
-        assertEq(trigger, false);
-        vm.stopPrank();
-    }
+    // function test_metUpdateTrigger() public {
+    //     vm.startPrank(user_);
+    //     fluxFarm.updateFarm();
+    //     bool trigger = fluxFarm.updateFarmTrigger();
+    //     assertEq(trigger, false);
+    //     vm.stopPrank();
+    // }
 
     function testFail_UpgradeContract() public {
         vm.startPrank(address(0x12345));

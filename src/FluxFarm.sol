@@ -18,9 +18,10 @@ import {TokenTransfer} from 'src/utils/TokenTransfer.sol';
 import {UniswapV3PositionHelper} from 'src/libraries/UniswapV3PositionHelper.sol';
 import {LiqAmountCalculator} from 'src/libraries/LiqAmountCalculator.sol';
 import {IFluxFarm} from 'src/interfaces/IFluxFarm.sol';
+import {AutomationCompatibleInterface} from 'src/interfaces/AutomationCompatibleInterface.sol';
 
 
-contract FluxFarm is UUPSUpgradeable, AccessControl, TokenTransfer, IERC721Receiver, IFluxFarm {
+contract FluxFarm is AutomationCompatibleInterface, UUPSUpgradeable, AccessControl, TokenTransfer, IERC721Receiver, IFluxFarm {
     event Invest(address token_, uint256 amount_, uint256 price_, uint256 value_, uint256 newTotalInvest_);
     event Withdraw(address token_, uint256 amount_, uint256 price_, uint256 value_, uint256 newTotalWithdraw_);
     event Harvest(uint256 totalAmount0_, uint256 totalAmount1_, uint256 totalFees0_, uint256 totalFees1_);
@@ -100,6 +101,9 @@ contract FluxFarm is UUPSUpgradeable, AccessControl, TokenTransfer, IERC721Recei
     uint256 public SnapshotCount;
     mapping(uint256 => Snapshot) public snapshotInfo;
 
+    uint256 public updateInterval;
+    uint256 public lastUpdateTimestamp;
+
     function _authorizeUpgrade(address newImplementation)
         internal
         onlyRole(DEFAULT_ADMIN_ROLE)
@@ -123,6 +127,7 @@ contract FluxFarm is UUPSUpgradeable, AccessControl, TokenTransfer, IERC721Recei
         _harvest();
         _;
         _reinvest();
+        _updateTimeLabel();
     }
 
     function initialize(
@@ -175,12 +180,28 @@ contract FluxFarm is UUPSUpgradeable, AccessControl, TokenTransfer, IERC721Recei
     }
 
     /// @inheritdoc IFluxFarm
-    function updateFarmTrigger() public view returns (bool) {
+    function outOfRangeTrigger() public view returns (bool) {
         // get tick from slot0
         (,int24 tick,,,,,) = poolState.slot0();
 
         // check the tick is out of range
         if (tick < farmingInfo.tickLower || tick > farmingInfo.tickUpper) {
+            return true;
+        }
+        return false;
+    }
+
+    /// @inheritdoc IFluxFarm
+    function timeTrigger() public view returns (bool) {
+        if (block.timestamp - lastUpdateTimestamp >= updateInterval) {
+            return true;
+        }
+        return false;
+    }
+
+    /// @inheritdoc IFluxFarm
+    function updateFarmTrigger() public view returns (bool) {
+        if (outOfRangeTrigger() || timeTrigger()) {
             return true;
         }
         return false;
@@ -321,6 +342,10 @@ contract FluxFarm is UUPSUpgradeable, AccessControl, TokenTransfer, IERC721Recei
         uint256 token0Value = token0Amount_ * token0Price / (10 ** token0Decimals);
         uint256 token1Value = token1Amount_ * token1Price / (10 ** token1Decimals);
         return token0Value + token1Value;
+    }
+
+    function _updateTimeLabel() internal {
+        lastUpdateTimestamp = block.timestamp;
     }
 
     /**
@@ -608,6 +633,11 @@ contract FluxFarm is UUPSUpgradeable, AccessControl, TokenTransfer, IERC721Recei
         receiver = receiver_;
     }
 
+    function setUpdateInterval(uint256 updateInterval_) external onlyRole(MANAGER) {
+        require(updateInterval_ >= 15 minutes, "INVALID_INTERVAL");
+        updateInterval = updateInterval_;
+    }
+
     /// @inheritdoc IFluxFarm
     function claimTokens(address token_, address to_, uint256 amount_) external onlyRole(SAFE_ADMIN) {
         require(to_ == receiver, "INVALID_RECEIVER");
@@ -743,8 +773,23 @@ contract FluxFarm is UUPSUpgradeable, AccessControl, TokenTransfer, IERC721Recei
     }
 
     /// @inheritdoc IFluxFarm
-    function updateFarm() external onlyRole(MANAGER) renewFarm returns (bool) {
+    function updateFarm() public renewFarm returns (bool) {
+        require(timeTrigger(), "No need to update");
         emit UpdateFarm(msg.sender, block.timestamp, block.number);
         return true;
+    }
+
+    /// @inheritdoc AutomationCompatibleInterface
+    function checkUpkeep(bytes calldata) external view override returns (
+        bool upkeepNeeded,
+        bytes memory performData
+    ) {
+        upkeepNeeded = updateFarmTrigger();
+    }
+
+    /// @inheritdoc AutomationCompatibleInterface
+    function performUpkeep(bytes calldata performData) external override {
+        require(updateFarmTrigger(), "No upkeep needed");
+        updateFarm();
     }
 }

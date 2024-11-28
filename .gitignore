@@ -17,6 +17,7 @@ logs/
 # Dotenv file
 !.env.example
 .env.op
+.env.arbitrum_sepolia
 
 *.json
 *.xlsx

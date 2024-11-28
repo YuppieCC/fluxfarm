@@ -2,6 +2,19 @@
 pragma solidity ^0.8.13;
 
 interface IFluxFarm {
+
+    /**
+    * @notice check the range of position.
+    * @return bool
+    */
+    function outOfRangeTrigger() external view returns (bool);
+
+    /**
+    * @notice check the time trigger.
+    * @return bool
+    */
+    function timeTrigger() external view returns (bool);
+
     /**
     * @notice check the update trigger.
     * @return bool
