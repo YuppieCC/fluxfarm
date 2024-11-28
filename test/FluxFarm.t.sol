@@ -183,4 +183,10 @@ contract FluxFarmTest is Test {
         assertEq(trigger, false);
         vm.stopPrank();
     }
+
+    function testFail_UpgradeContract() public {
+        vm.startPrank(address(0x12345));
+        fluxFarm.upgradeToAndCall(address(new FluxFarm()), '');
+        vm.stopPrank();
+    }
 }
