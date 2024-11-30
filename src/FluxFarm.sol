@@ -774,7 +774,7 @@ contract FluxFarm is AutomationCompatibleInterface, UUPSUpgradeable, AccessContr
 
     /// @inheritdoc IFluxFarm
     function updateFarm() public renewFarm returns (bool) {
-        require(timeTrigger(), "No need to update");
+        require(updateFarmTrigger(), "No need to update");
         emit UpdateFarm(msg.sender, block.timestamp, block.number);
         return true;
     }
