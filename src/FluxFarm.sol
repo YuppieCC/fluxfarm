@@ -104,6 +104,10 @@ contract FluxFarm is AutomationCompatibleInterface, UUPSUpgradeable, AccessContr
     uint256 public updateInterval;
     uint256 public lastUpdateTimestamp;
 
+    // upgrade_4.s.sol
+    uint256 public serviceFeeSlippage;
+    event CutServiceFee(uint256 serviceFee0_, uint256 serviceFee1_);
+
     function _authorizeUpgrade(address newImplementation)
         internal
         onlyRole(DEFAULT_ADMIN_ROLE)
@@ -525,6 +529,21 @@ contract FluxFarm is AutomationCompatibleInterface, UUPSUpgradeable, AccessContr
         return (0, 0, 0, 0);
     }
 
+    function _cutServiceFee(uint256 totalFees0_, uint256 totalFees1_) internal {
+        uint256 serviceFee0 = totalFees0_ * serviceFeeSlippage / 1e18;
+        uint256 serviceFee1 = totalFees1_ * serviceFeeSlippage / 1e18;
+
+        if (serviceFee0 > 0) {
+            doTransferOut(token0, receiver, serviceFee0);
+        }
+
+        if (serviceFee1 > 0) {
+            doTransferOut(token1, receiver, serviceFee1);
+        }
+
+        emit CutServiceFee(serviceFee0, serviceFee1);
+    }
+
     /**
     * @notice harvest all positions
     */
@@ -551,6 +570,7 @@ contract FluxFarm is AutomationCompatibleInterface, UUPSUpgradeable, AccessContr
             totalFees1 += fee1;
         }
 
+        _cutServiceFee(totalFees0, totalFees1);
         emit Harvest(totalAmount0, totalAmount1, totalFees0, totalFees1);
     }
 
@@ -630,6 +650,11 @@ contract FluxFarm is AutomationCompatibleInterface, UUPSUpgradeable, AccessContr
     function setSlippage(uint256 slippage_) external onlyRole(MANAGER) {
         require(slippage_ > 0 && slippage_ < 1e18, "INVALID_SLIPPAGE");
         slippage = slippage_;
+    }
+
+    function setServiceFeeSlippage(uint256 serviceFeeSlippage_) external onlyRole(MANAGER) {
+        require(serviceFeeSlippage_ > 0 && serviceFeeSlippage_ < 1e18, "INVALID_SERVICE_FEE_SLIPPAGE");
+        serviceFeeSlippage = serviceFeeSlippage_;
     }
 
     /// @inheritdoc IFluxFarm
