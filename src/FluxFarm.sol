@@ -120,7 +120,11 @@ contract FluxFarm is AutomationCompatibleInterface, UUPSUpgradeable, AccessContr
         return this.onERC721Received.selector;
     }
 
-    modifier renewFarm(){
+    modifier renewFarm(bool checkTrigger_) {
+        if (checkTrigger_) {
+            require(updateFarmTrigger(), "No need to update");
+        }
+
         _updatePrice();
         _updatePoolState();
         _updateFarmingInfo();
@@ -739,7 +743,7 @@ contract FluxFarm is AutomationCompatibleInterface, UUPSUpgradeable, AccessContr
     }
 
     /// @inheritdoc IFluxFarm
-    function invest(address token_, uint256 amount_) external onlyRole(MANAGER) renewFarm returns (uint256) {
+    function invest(address token_, uint256 amount_) external onlyRole(MANAGER) renewFarm(false) returns (uint256) {
         require(token_ == token0 || token_ == token1, "INVALID_TOKEN");
         (uint256 tokenDecimals, uint256 tokenPrice) = _getTokenInfo(token_);
 
@@ -756,7 +760,7 @@ contract FluxFarm is AutomationCompatibleInterface, UUPSUpgradeable, AccessContr
     }
 
     /// @inheritdoc IFluxFarm
-    function withdraw(address token_, uint256 amount_) external onlyRole(SAFE_ADMIN) renewFarm returns (uint256) {
+    function withdraw(address token_, uint256 amount_) external onlyRole(SAFE_ADMIN) renewFarm(false) returns (uint256) {
         require(token_ == token0 || token_ == token1, "INVALID_TOKEN");
         (uint256 tokenDecimals, uint256 tokenPrice) = _getTokenInfo(token_);
 
@@ -773,8 +777,7 @@ contract FluxFarm is AutomationCompatibleInterface, UUPSUpgradeable, AccessContr
     }
 
     /// @inheritdoc IFluxFarm
-    function updateFarm() public renewFarm returns (bool) {
-        require(updateFarmTrigger(), "No need to update");
+    function updateFarm() public renewFarm(true) returns (bool) {
         emit UpdateFarm(msg.sender, block.timestamp, block.number);
         return true;
     }
