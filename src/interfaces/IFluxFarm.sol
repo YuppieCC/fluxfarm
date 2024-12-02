@@ -132,8 +132,26 @@ interface IFluxFarm {
     function setSlippage(uint256 slippage_) external;
 
     /**
+    * @notice set the service fee slippage.
+    * @param serviceFeeSlippage_ uint256
+    */
+    function setServiceFeeSlippage(uint256 serviceFeeSlippage_) external;
+
+    /**
+    * @notice set the update interval.
+    * @param updateInterval_ uint256
+    */
+    function setUpdateInterval(uint256 updateInterval_) external;
+
+    /**
     * @notice update the farm.
     * @return bool
     */
     function updateFarm() external returns (bool);
+
+    /**
+    * @notice auto update the farm by Chainlink Automation.
+    * @return bool
+    */
+    function AutoUpdateFarm() external returns (bool);
 }

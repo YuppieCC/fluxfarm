@@ -55,28 +55,31 @@ library LiqAmountCalculator {
     function getAmountByBestLiquidity(
         uint256 token0Factor_,
         uint256 token1Factor_,
-        uint256 totalValue_,
+        uint256 positionValueInToken0_,
         uint256 token0Decimals_,
         uint256 token1Decimals_,
-        uint256 token0PriceIn18_,
-        uint256 token1PriceIn18_
+        uint256 token1PriceInToken0
     ) public pure returns (uint256, uint256) {
         // why:
+        // token1PriceInToken0: token1Price / token0Price, token0 per token1
+        // positionValueInToken0_ = token0Amount + token1Amount * token1PriceInToken0
+
         // token1Amount = token1Factor_ * token0Amount
-        // totalValue_ = token0Factor_ * token0Amount * token0PriceIn18_ + token1Factor_ * token0Amount * token1PriceIn18_
+        // positionValueInToken0_ = token0Factor_ * token0Amount * 1 + token1Factor_ * token0Amount * token1PriceInToken0
+
         // get: 
-        // token0Amount = totalValue_ / (token0Factor_ * token0PriceIn18_ + token1PriceIn18_ * token1Factor_)
+        // token0Amount = positionValueInToken0_ / (token0Factor_ + token1Factor_ * token1PriceInToken0)
 
         uint256 token0Amount;
         uint256 token1Amount;
         if (token0Factor_ == 0) {
             token0Amount = 0;
-            token1Amount = totalValue_ * 1e18 / token1PriceIn18_;
+            token1Amount = positionValueInToken0_ * 1e18 / token1PriceInToken0;
         } else if (token1Factor_ == 0) {
-            token0Amount = totalValue_ * 1e18 / token0PriceIn18_;
+            token0Amount = positionValueInToken0_;
             token1Amount = 0;
         } else {
-            token0Amount = totalValue_ * 1e18 / (token0Factor_ * token0PriceIn18_ / 1e18 + token1Factor_ * token1PriceIn18_ / 1e18);
+            token0Amount = positionValueInToken0_ * 1e18 / (token0Factor_ + token1Factor_ * token1PriceInToken0 / 1e18);
             token1Amount = token0Amount * token1Factor_ / 1e18;
         }
 

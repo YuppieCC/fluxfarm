@@ -108,6 +108,9 @@ contract FluxFarm is AutomationCompatibleInterface, UUPSUpgradeable, AccessContr
     uint256 public serviceFeeSlippage;
     event CutServiceFee(uint256 serviceFee0_, uint256 serviceFee1_);
 
+    // upgrade_5.s.sol
+    uint256 public token1PriceInToken0;
+
     function _authorizeUpgrade(address newImplementation)
         internal
         onlyRole(DEFAULT_ADMIN_ROLE)
@@ -289,7 +292,7 @@ contract FluxFarm is AutomationCompatibleInterface, UUPSUpgradeable, AccessContr
 
     /// @inheritdoc IFluxFarm
     function getAmountByBestLiquidity(
-        uint256 totalValue_,
+        uint256 positionValueInToken0_,
         int24 tickCurrent_,
         int24 tickLower_,
         int24 tickUpper_
@@ -305,11 +308,10 @@ contract FluxFarm is AutomationCompatibleInterface, UUPSUpgradeable, AccessContr
         return LiqAmountCalculator.getAmountByBestLiquidity(
             token0_factor,
             token1_factor,
-            totalValue_,
+            positionValueInToken0_,
             token0Decimals,
             token1Decimals,
-            token0Price,
-            token1Price
+            token1PriceInToken0
         );
     }
 
@@ -340,16 +342,19 @@ contract FluxFarm is AutomationCompatibleInterface, UUPSUpgradeable, AccessContr
     }
 
     /**
-    * @notice get the value of position
+    * @notice get the value of position in token0.
     * @param token0Amount_ uint256
     * @param token1Amount_ uint256
-    * @return value
+    * @return valueInToken0
     */
-    function _getPositionValue(uint256 token0Amount_, uint256 token1Amount_) internal view returns (uint256) {
-        // upadte price before calculate the value of position 
-        uint256 token0Value = token0Amount_ * token0Price / (10 ** token0Decimals);
-        uint256 token1Value = token1Amount_ * token1Price / (10 ** token1Decimals);
-        return token0Value + token1Value;
+    function _getValueInToken0(uint256 token0Amount_, uint256 token1Amount_) internal view returns (uint256) {
+        // trans amonut to 1e18
+        uint256 token0Amount = token0Amount_ * 1e18 / (10 ** token0Decimals);
+        uint256 token1Amount = token1Amount_ * 1e18 / (10 ** token1Decimals);
+
+        uint256 token0Value = token0Amount * 1;  // just for explain, token0 per token0
+        uint256 token1ValueInToken0 = token1Amount * token1PriceInToken0 / 1e18;  // token0 per token1
+        return token0Value + token1ValueInToken0;
     }
 
     function _updateTimeLabel() internal {
@@ -362,6 +367,7 @@ contract FluxFarm is AutomationCompatibleInterface, UUPSUpgradeable, AccessContr
     function _updatePrice() internal {
         token0Price = getPriceIn1e18(token0Oracle, token0OracleDeimals);
         token1Price = getPriceIn1e18(token1Oracle, token1OracleDeimals);
+        token1PriceInToken0 = token1Price * 1e18 / token0Price;
     }
 
     /**
@@ -554,6 +560,7 @@ contract FluxFarm is AutomationCompatibleInterface, UUPSUpgradeable, AccessContr
         uint256 totalFees1;
 
         uint256 balance = getPositionBalance();
+        (uint256 positionFees0_, uint256 positionFees1_) = getAllPositionFees();
         for (uint256 i = 0; i < balance; i++) {
             uint256 tokenId = IERC721Enumerable(address(positionManager)).tokenOfOwnerByIndex(this_, i);
             // harvest
@@ -570,7 +577,7 @@ contract FluxFarm is AutomationCompatibleInterface, UUPSUpgradeable, AccessContr
             totalFees1 += fee1;
         }
 
-        _cutServiceFee(totalFees0, totalFees1);
+        _cutServiceFee(positionFees0_, positionFees1_);
         emit Harvest(totalAmount0, totalAmount1, totalFees0, totalFees1);
     }
 
@@ -582,13 +589,9 @@ contract FluxFarm is AutomationCompatibleInterface, UUPSUpgradeable, AccessContr
         uint256 token0Balance = IERC20(token0).balanceOf(this_);
         uint256 token1Balance = IERC20(token1).balanceOf(this_);
         
-        uint256 totalValue = _getPositionValue(
-            token0Balance,
-            token1Balance
-        );
-
+        uint256 positionValueInToken0 = _getValueInToken0(token0Balance, token1Balance);  // 1e18
         (uint256 amount0Target, uint256 amount1Target) = getAmountByBestLiquidity(
-            totalValue,
+            positionValueInToken0,
             farmingSlot0.tick,
             farmingInfo.tickLower,
             farmingInfo.tickUpper
@@ -652,6 +655,7 @@ contract FluxFarm is AutomationCompatibleInterface, UUPSUpgradeable, AccessContr
         slippage = slippage_;
     }
 
+    /// @inheritdoc IFluxFarm
     function setServiceFeeSlippage(uint256 serviceFeeSlippage_) external onlyRole(MANAGER) {
         require(serviceFeeSlippage_ > 0 && serviceFeeSlippage_ < 1e18, "INVALID_SERVICE_FEE_SLIPPAGE");
         serviceFeeSlippage = serviceFeeSlippage_;
@@ -662,6 +666,7 @@ contract FluxFarm is AutomationCompatibleInterface, UUPSUpgradeable, AccessContr
         receiver = receiver_;
     }
 
+    /// @inheritdoc IFluxFarm
     function setUpdateInterval(uint256 updateInterval_) external onlyRole(MANAGER) {
         require(updateInterval_ >= 15 minutes, "INVALID_INTERVAL");
         updateInterval = updateInterval_;
@@ -680,10 +685,13 @@ contract FluxFarm is AutomationCompatibleInterface, UUPSUpgradeable, AccessContr
     /// @inheritdoc IFluxFarm
     function initialPosition(
         int24[][] memory ticks_,
-        uint256 onePositionValue_
+        uint256 onePositionValueInToken0_
     ) external onlyRole(MANAGER) returns (uint256) {
         _updatePoolState();
         _updatePrice();
+
+        // trans to 1e18
+        uint256 _onePositionValueInToken0 = onePositionValueInToken0_ * 1e18 / (10 ** token0Decimals);
 
         uint256 balanceBefore = getPositionBalance();
         require(balanceBefore == 0, "ALREADY_INITIAL_POSITION");
@@ -692,7 +700,7 @@ contract FluxFarm is AutomationCompatibleInterface, UUPSUpgradeable, AccessContr
             int24 tickLower = ticks_[i][0];
             int24 tickUpper = ticks_[i][1];
             (uint256 token0Amount, uint256 token1Amount) = getAmountByBestLiquidity(
-                onePositionValue_,
+                _onePositionValueInToken0,
                 farmingSlot0.tick,
                 tickLower,
                 tickUpper
@@ -802,7 +810,13 @@ contract FluxFarm is AutomationCompatibleInterface, UUPSUpgradeable, AccessContr
     }
 
     /// @inheritdoc IFluxFarm
-    function updateFarm() public renewFarm(true) returns (bool) {
+    function updateFarm() external renewFarm(false) onlyRole(MANAGER) returns (bool) {
+        emit UpdateFarm(msg.sender, block.timestamp, block.number);
+        return true;
+    }
+
+    /// @inheritdoc IFluxFarm
+    function AutoUpdateFarm() public renewFarm(true) returns (bool) {
         emit UpdateFarm(msg.sender, block.timestamp, block.number);
         return true;
     }
@@ -818,6 +832,6 @@ contract FluxFarm is AutomationCompatibleInterface, UUPSUpgradeable, AccessContr
     /// @inheritdoc AutomationCompatibleInterface
     function performUpkeep(bytes calldata performData) external override {
         require(updateFarmTrigger(), "No upkeep needed");
-        updateFarm();
+        AutoUpdateFarm();
     }
 }
