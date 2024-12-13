@@ -6,10 +6,10 @@ library UniswapPositionCalculator {
     uint256 constant Q96 = 2**96;
 
     function calculateAmounts(
-        uint160 sqrtPriceX96, // 当前价格 √P
-        uint160 sqrtPriceAX96, // 下界价格 √P_a
-        uint160 sqrtPriceBX96, // 上界价格 √P_b
-        uint128 liquidity // 流动性 L
+        uint160 sqrtPriceX96,
+        uint160 sqrtPriceAX96,
+        uint160 sqrtPriceBX96,
+        uint128 liquidity
     ) external pure returns (uint256 amount0, uint256 amount1) {
         require(sqrtPriceAX96 <= sqrtPriceBX96, "Invalid price range");
 
