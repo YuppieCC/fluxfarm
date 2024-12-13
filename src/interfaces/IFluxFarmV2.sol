@@ -35,12 +35,20 @@ interface IFluxFarmV2 {
     function getPositionFee(uint256 tokenId_) external view returns (uint256, uint256);
 
     /**
+    * @dev set the oracle of token.
     * @notice check the price of token in 1e18.
-    * @param oracle_ address
-    * @param decimals_ uint256
+    * @param token_ address
     * @return price
     */
-    function getPriceIn1e18(address oracle_, uint256 decimals_) external view returns (uint256);
+    function getPriceIn1e18(address token_) external view returns (uint256);
+
+    /**
+    * @notice check the value of token.
+    * @param token_ address
+    * @param amount_ uint256
+    * @return value
+    */
+    function getTokenValue(address token_, uint256 amount_) external view returns (uint256);
 
     /**
     * @notice check the amount after slippage.
@@ -133,9 +141,9 @@ interface IFluxFarmV2 {
 
     /**
     * @notice set the service fee slippage.
-    * @param serviceFeeSlippage_ uint256
+    * @param setserviceFeeFactor_ uint256
     */
-    function setServiceFeeSlippage(uint256 serviceFeeSlippage_) external;
+    function setserviceFeeFactor(uint256 setserviceFeeFactor_) external;
 
     /**
     * @notice set the update interval.
