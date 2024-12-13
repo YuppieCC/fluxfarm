@@ -185,12 +185,12 @@ contract FluxFarmV2 is AutomationCompatibleInterface, UUPSUpgradeable, AccessCon
         IERC20(token1).approve(address(swapRouterAddress_), type(uint256).max);
     }
 
-    /// @inheritdoc IFluxFarm
+    /// @inheritdoc IFluxFarmV2
     function getPositionBalance() public view returns (uint256) {
         return IERC721(address(positionManager)).balanceOf(this_);
     }
 
-    /// @inheritdoc IFluxFarm
+    /// @inheritdoc IFluxFarmV2
     function outOfRangeTrigger() public view returns (bool) {
         // get tick from slot0
         (,int24 tick,,,,,) = poolState.slot0();
@@ -202,7 +202,7 @@ contract FluxFarmV2 is AutomationCompatibleInterface, UUPSUpgradeable, AccessCon
         return false;
     }
 
-    /// @inheritdoc IFluxFarm
+    /// @inheritdoc IFluxFarmV2
     function timeTrigger() public view returns (bool) {
         if (block.timestamp - lastUpdateTimestamp >= updateInterval) {
             return true;
@@ -210,7 +210,7 @@ contract FluxFarmV2 is AutomationCompatibleInterface, UUPSUpgradeable, AccessCon
         return false;
     }
 
-    /// @inheritdoc IFluxFarm
+    /// @inheritdoc IFluxFarmV2
     function updateFarmTrigger() public view returns (bool) {
         if (outOfRangeTrigger() || timeTrigger()) {
             return true;
@@ -218,7 +218,7 @@ contract FluxFarmV2 is AutomationCompatibleInterface, UUPSUpgradeable, AccessCon
         return false;
     }
 
-    /// @inheritdoc IFluxFarm
+    /// @inheritdoc IFluxFarmV2
     function getPositionFee(uint256 tokenId_) public view returns (uint256, uint256) {
         (
             ,,,,,
@@ -246,19 +246,19 @@ contract FluxFarmV2 is AutomationCompatibleInterface, UUPSUpgradeable, AccessCon
         return (fees0, fees1);
     }
 
-    /// @inheritdoc IFluxFarm
+    /// @inheritdoc IFluxFarmV2
     function getPriceIn1e18(address oracle_, uint256 decimals_) public view returns (uint256) {
         (, int price, , , ) = IEACAggregatorProxy(oracle_).latestRoundData();  // price is in 1e8
         require(price > 0, "Invalid price data");
         return uint256(price) * 1e18 / (10 ** decimals_);
     }
 
-    /// @inheritdoc IFluxFarm
+    /// @inheritdoc IFluxFarmV2
     function getAmountAfterSlippage(uint256 amount_, uint256 slippage_) public pure returns (uint256) {
         return amount_ * (1e18 - slippage_) / 1e18;
     }
 
-    /// @inheritdoc IFluxFarm
+    /// @inheritdoc IFluxFarmV2
     function getAmountOutMin(address tokenIn_, address tokenOut_, uint256 amountIn_) public view returns (uint256) {
         if (tokenIn_ == token0 && tokenOut_ == token1) {
             uint256 amountIn_1e18 = amountIn_ * 1e18 / (10 ** token0Decimals);
@@ -278,7 +278,7 @@ contract FluxFarmV2 is AutomationCompatibleInterface, UUPSUpgradeable, AccessCon
         revert("INVALID_TOKEN");
     }
 
-    /// @inheritdoc IFluxFarm
+    /// @inheritdoc IFluxFarmV2
     function getAllPositionFees() public view returns (uint256 totalFees0, uint256 totalFees1) {
         uint256 balance = getPositionBalance();
         for (uint256 i = 0; i < balance; i++) {
@@ -290,7 +290,7 @@ contract FluxFarmV2 is AutomationCompatibleInterface, UUPSUpgradeable, AccessCon
         return (totalFees0, totalFees1);        
     }
 
-    /// @inheritdoc IFluxFarm
+    /// @inheritdoc IFluxFarmV2
     function getAmountByBestLiquidity(
         uint256 positionValueInToken0_,
         int24 tickCurrent_,
@@ -651,30 +651,30 @@ contract FluxFarmV2 is AutomationCompatibleInterface, UUPSUpgradeable, AccessCon
         }
     }
 
-    /// @inheritdoc IFluxFarm
+    /// @inheritdoc IFluxFarmV2
     function setSlippage(uint256 slippage_) external onlyRole(MANAGER) {
         require(slippage_ > 0 && slippage_ < 1e18, "INVALID_SLIPPAGE");
         slippage = slippage_;
     }
 
-    /// @inheritdoc IFluxFarm
+    /// @inheritdoc IFluxFarmV2
     function setServiceFeeSlippage(uint256 serviceFeeSlippage_) external onlyRole(MANAGER) {
         require(serviceFeeSlippage_ > 0 && serviceFeeSlippage_ < 1e18, "INVALID_SERVICE_FEE_SLIPPAGE");
         serviceFeeSlippage = serviceFeeSlippage_;
     }
 
-    /// @inheritdoc IFluxFarm
+    /// @inheritdoc IFluxFarmV2
     function setReceiver(address receiver_) external onlyRole(SAFE_ADMIN) {
         receiver = receiver_;
     }
 
-    /// @inheritdoc IFluxFarm
+    /// @inheritdoc IFluxFarmV2
     function setUpdateInterval(uint256 updateInterval_) external onlyRole(MANAGER) {
         require(updateInterval_ >= 15 minutes, "INVALID_INTERVAL");
         updateInterval = updateInterval_;
     }
 
-    /// @inheritdoc IFluxFarm
+    /// @inheritdoc IFluxFarmV2
     function claimTokens(address token_, address to_, uint256 amount_) external onlyRole(SAFE_ADMIN) {
         require(to_ == receiver, "INVALID_RECEIVER");
         if (token_ == address(0)) {
@@ -684,7 +684,7 @@ contract FluxFarmV2 is AutomationCompatibleInterface, UUPSUpgradeable, AccessCon
         }
     }
 
-    /// @inheritdoc IFluxFarm
+    /// @inheritdoc IFluxFarmV2
     function initialPosition(
         int24[][] memory ticks_,
         uint256 onePositionValueInToken0_
@@ -731,7 +731,7 @@ contract FluxFarmV2 is AutomationCompatibleInterface, UUPSUpgradeable, AccessCon
         return ticks_.length;
     }
 
-    /// @inheritdoc IFluxFarm
+    /// @inheritdoc IFluxFarmV2
     function closeAllPosition(bool isBurn_) external onlyRole(MANAGER) returns (
         uint256 burnCount,
         uint256 totalAmount0,
@@ -777,7 +777,7 @@ contract FluxFarmV2 is AutomationCompatibleInterface, UUPSUpgradeable, AccessCon
         );
     }
 
-    /// @inheritdoc IFluxFarm
+    /// @inheritdoc IFluxFarmV2
     function invest(address token_, uint256 amount_) external onlyRole(MANAGER) renewFarm(false) returns (uint256) {
         require(token_ == token0 || token_ == token1, "INVALID_TOKEN");
         (uint256 tokenDecimals, uint256 tokenPrice) = _getTokenInfo(token_);
@@ -794,7 +794,7 @@ contract FluxFarmV2 is AutomationCompatibleInterface, UUPSUpgradeable, AccessCon
         return tokenValue;
     }
 
-    /// @inheritdoc IFluxFarm
+    /// @inheritdoc IFluxFarmV2
     function withdraw(address token_, uint256 amount_) external onlyRole(SAFE_ADMIN) renewFarm(false) returns (uint256) {
         require(token_ == token0 || token_ == token1, "INVALID_TOKEN");
         (uint256 tokenDecimals, uint256 tokenPrice) = _getTokenInfo(token_);
@@ -811,13 +811,13 @@ contract FluxFarmV2 is AutomationCompatibleInterface, UUPSUpgradeable, AccessCon
         return tokenValue;
     }
 
-    /// @inheritdoc IFluxFarm
+    /// @inheritdoc IFluxFarmV2
     function updateFarm() external renewFarm(false) onlyRole(MANAGER) returns (bool) {
         emit UpdateFarm(msg.sender, block.timestamp, block.number);
         return true;
     }
 
-    /// @inheritdoc IFluxFarm
+    /// @inheritdoc IFluxFarmV2
     function AutoUpdateFarm() public renewFarm(true) returns (bool) {
         emit UpdateFarm(msg.sender, block.timestamp, block.number);
         return true;
