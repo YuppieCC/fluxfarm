@@ -490,14 +490,16 @@ contract FluxFarm is AutomationCompatibleInterface, UUPSUpgradeable, AccessContr
                 })
             );
 
-            // collect
-            (fee0, fee1) = positionManager.collect(
+            // after decrease liquidity, collect the amount + fee
+            (uint256 amount0WithFee0, uint256 amount1WithFee1) = positionManager.collect(
                 INonfungiblePositionManager.CollectParams({
                     tokenId: tokenId_,
                     recipient: this_,
                     amount0Max: type(uint128).max,
                     amount1Max: type(uint128).max
             }));
+            fee0 = amount0WithFee0 - amount0;
+            fee1 = amount1WithFee1 - amount1;
         }
     }
 

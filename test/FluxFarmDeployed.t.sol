@@ -56,15 +56,20 @@ contract FluxFarmDeployedTest is Test {
 
     function setUp() public {
         fluxFarm = FluxFarm(deployedFluxFarm);
-        // vm.startPrank(user_);
-        // fluxFarm.upgradeToAndCall(address(new FluxFarm()), '');
-        // vm.stopPrank();
+        vm.startPrank(user_);
+        fluxFarm.upgradeToAndCall(address(new FluxFarm()), '');
+        vm.stopPrank();
     }
 
     function test_updateFarm() public {
         vm.startPrank(user_);
-        fluxFarm.setSlippage(slippage);
         fluxFarm.updateFarm();
+        vm.stopPrank();
+    }
+
+    function test_closeAllPosition() public {
+        vm.startPrank(user_);
+        fluxFarm.closeAllPosition(true);
         vm.stopPrank();
     }
 }
