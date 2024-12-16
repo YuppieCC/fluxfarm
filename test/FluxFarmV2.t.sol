@@ -89,40 +89,55 @@ contract FluxFarmV2Test is Test {
         vm.stopPrank();
     }
 
-    function test_updateFarm() public {
-        vm.startPrank(user_);
-        fluxFarmV2.updateFarm();
-        vm.stopPrank();
-    }
+    // function test_updateFarm() public {
+    //     vm.startPrank(user_);
+    //     fluxFarmV2.updateFarm();
+    //     vm.stopPrank();
+    // }
 
-    function test_harvestInfo() public {
-        vm.startPrank(user_);
-        fluxFarmV2.updateFarm();
-        vm.stopPrank();
+    // function test_harvestInfo() public {
+    //     vm.startPrank(user_);
+    //     fluxFarmV2.updateFarm();
+    //     vm.stopPrank();
 
-        uint256 latestInvestId = fluxFarmV2.latestInvestID();
-        (
-            uint256 investID,
-            uint256 startTimestamp,
-            uint256 endTimestamp,
-            uint256 tokenId,
-            uint256 liquidity,
-            uint256 totalFees0,
-            uint256 totalFees1
-        ) = fluxFarmV2.harvestInfo(latestInvestId);
-        emit log_named_uint("latestInvestId: ", latestInvestId);
-        emit log_named_uint("investID: ", investID);
-        emit log_named_uint("startTimestamp: ", startTimestamp);
-        emit log_named_uint("endTimestamp: ", endTimestamp);
-        emit log_named_uint("tokenId: ", tokenId);
-        emit log_named_uint("liquidity: ", liquidity);
-        emit log_named_uint("totalFees0: ", totalFees0);
-        emit log_named_uint("totalFees1: ", totalFees1);
-    }
+    //     uint256 latestInvestId = fluxFarmV2.latestInvestID();
+    //     (
+    //         uint256 investID,
+    //         uint256 startTimestamp,
+    //         uint256 endTimestamp,
+    //         uint256 tokenId,
+    //         uint256 liquidity,
+    //         uint256 totalFees0,
+    //         uint256 totalFees1
+    //     ) = fluxFarmV2.harvestInfo(latestInvestId);
+    //     emit log_named_uint("latestInvestId: ", latestInvestId);
+    //     emit log_named_uint("investID: ", investID);
+    //     emit log_named_uint("startTimestamp: ", startTimestamp);
+    //     emit log_named_uint("endTimestamp: ", endTimestamp);
+    //     emit log_named_uint("tokenId: ", tokenId);
+    //     emit log_named_uint("liquidity: ", liquidity);
+    //     emit log_named_uint("totalFees0: ", totalFees0);
+    //     emit log_named_uint("totalFees1: ", totalFees1);
+    // }
 
     function test_investAndWithdraw() public {
         vm.startPrank(user_);
-        fluxFarmV2.withdraw(token0, 1e6);
+        // IERC20(token0).approve(address(fluxFarmV2), IERC20(token0).balanceOf(user_));
+        // fluxFarmV2.invest(token0, IERC20(token0).balanceOf(user_));
+
+        IERC20(token1).approve(address(fluxFarmV2), IERC20(token1).balanceOf(user_));
+        fluxFarmV2.invest(token1, IERC20(token1).balanceOf(user_));
         vm.stopPrank();
+
+        uint256 totalInvest = fluxFarmV2.totalInvest();
+        emit log_named_uint("totalInvest: ", totalInvest);
+
+        vm.startPrank(user_);
+        // fluxFarmV2.withdraw(token0, fluxFarmV2.tokenInvest(token0));
+        fluxFarmV2.withdraw(token1, fluxFarmV2.tokenInvest(token1));
+        vm.stopPrank();
+
+        uint256 totalWithdraw = fluxFarmV2.totalWithdraw();
+        emit log_named_uint("totalWithdraw: ", totalWithdraw);
     }
 }

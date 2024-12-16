@@ -254,7 +254,7 @@ contract FluxFarmV2 is AutomationCompatibleInterface, UUPSUpgradeable, AccessCon
     /// @inheritdoc IFluxFarmV2
     function getTokenValue(address token_, uint256 amount_) public view returns (uint256) {
         uint256 _price = getPriceIn1e18(token_);
-        return amount_ * _price / 1e18;
+        return amount_ * _price / (10 ** tokenInfo[token_].decimals);
     }
 
     /// @inheritdoc IFluxFarmV2
@@ -775,6 +775,7 @@ contract FluxFarmV2 is AutomationCompatibleInterface, UUPSUpgradeable, AccessCon
 
     /// @inheritdoc IFluxFarmV2
     function invest(address token_, uint256 amount_) external onlyRole(MANAGER) returns (uint256) {
+        require(amount_ > 0, "INVALID_AMOUNT");
         require(token_ == token0 || token_ == token1, "INVALID_TOKEN");
         uint256 amountReceived = doTransferIn(token_, msg.sender, amount_);  // transfer in
         uint256 tokenValue = getTokenValue(token_, amountReceived);
@@ -789,6 +790,7 @@ contract FluxFarmV2 is AutomationCompatibleInterface, UUPSUpgradeable, AccessCon
 
     /// @inheritdoc IFluxFarmV2
     function withdraw(address token_, uint256 amount_) external onlyRole(SAFE_ADMIN) returns (uint256) {
+        require(amount_ > 0, "INVALID_AMOUNT");
         require(token_ == token0 || token_ == token1, "INVALID_TOKEN");
         uint256 amountWithdraw = doTransferOut(token_, msg.sender, amount_);  // transfer out
         uint256 tokenValue = getTokenValue(token_, amountWithdraw);
