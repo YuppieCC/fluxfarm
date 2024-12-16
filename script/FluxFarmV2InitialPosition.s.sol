@@ -8,11 +8,9 @@ import {FluxFarmV2} from "src/FluxFarmV2.sol";
 contract FluxFarmV2InitialPositionScript is Script {
     FluxFarmV2 public fluxFarmV2;
     
-    address public deployedFluxFarmAddress = 0xF85cc35AF0ffa8739a03818fd18b821Ae829404B;
+    address public deployedFluxFarmAddress = 0xfc078b6dA7eb45a858C58cD8f66e3C6d64Cd5C3F;
     uint256 public onePositionValue_ = 1e6;
-    uint256 public updateInterval = 1 weeks;
-    uint256 public slippage = 100000000000000000;
-    uint256 public serviceFeeFactor = 800000000000000000;
+
     int24[][] public ticks_ = [
         [int24(256200), int24(258200)],
         [int24(257200), int24(259000)],
@@ -40,9 +38,6 @@ contract FluxFarmV2InitialPositionScript is Script {
         vm.startBroadcast();
 
         fluxFarmV2 = FluxFarmV2(deployedFluxFarmAddress);
-        fluxFarmV2.setUpdateInterval(updateInterval);
-        fluxFarmV2.setserviceFeeFactor(serviceFeeFactor);
-        fluxFarmV2.setSlippage(slippage);
         fluxFarmV2.initialPosition(ticks_, onePositionValue_);
 
         vm.stopBroadcast();
