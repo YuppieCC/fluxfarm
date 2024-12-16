@@ -4,6 +4,24 @@ pragma solidity ^0.8.13;
 interface IFluxFarmV2 {
 
     /**
+    * @notice check the latest invest id.
+    * @return latestInvestID
+    */
+    function latestInvestID() external view returns (uint256);
+
+    /**
+    * @notice check the token0.
+    * @return token0
+    */  
+    function token0() external view returns (address);
+
+    /**
+    * @notice check the token1.
+    * @return token1
+    */
+    function token1() external view returns (address);
+
+    /**
     * @notice check the range of position.
     * @return bool
     */
