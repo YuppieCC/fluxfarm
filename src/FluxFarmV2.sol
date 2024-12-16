@@ -133,14 +133,13 @@ contract FluxFarmV2 is AutomationCompatibleInterface, UUPSUpgradeable, AccessCon
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
         _grantRole(MANAGER, msg.sender);
         _grantRole(SAFE_ADMIN, msg.sender);
+        
         receiver = msg.sender;
-
         this_ = address(this);
         positionManager = INonfungiblePositionManager(positionManager_);
         swapRouter = ISwapRouter(swapRouterAddress_);
         poolState = IUniswapV3PoolState(uniswapV3Pool_);
         fee = poolState.fee();
-
         token0 = token0_;
         token1 = token1_;
         uint256 _token0Decimals = IERC20Metadata(token0_).decimals();
@@ -538,7 +537,6 @@ contract FluxFarmV2 is AutomationCompatibleInterface, UUPSUpgradeable, AccessCon
         uint256 totalFees1;
 
         uint256 balance = getPositionBalance();
-        (uint256 positionFees0_, uint256 positionFees1_) = getAllPositionFees();
         for (uint256 i = 0; i < balance; i++) {
             uint256 tokenId = IERC721Enumerable(address(positionManager)).tokenOfOwnerByIndex(this_, i);
             // harvest
@@ -555,7 +553,7 @@ contract FluxFarmV2 is AutomationCompatibleInterface, UUPSUpgradeable, AccessCon
             totalFees1 += fee1;
         }
 
-        _cutServiceFee(positionFees0_, positionFees1_);
+        _cutServiceFee(totalFees0, totalFees1);
         emit Harvest(totalAmount0, totalAmount1, totalFees0, totalFees1);
     }
 

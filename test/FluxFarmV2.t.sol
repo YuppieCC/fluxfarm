@@ -6,7 +6,7 @@ import {Test} from "forge-std/Test.sol";
 import {UUPSProxy} from "../src/utils/UUPSProxy.sol";
 import {FluxFarmV2} from 'src/FluxFarmV2.sol';
 
-contract FluxFarmV2est is Test {
+contract FluxFarmV2Test is Test {
     bytes32 public constant MANAGER = bytes32(keccak256(abi.encodePacked("MANAGER")));
 
     FluxFarmV2 public fluxFarmV2;
@@ -90,6 +90,7 @@ contract FluxFarmV2est is Test {
         vm.startPrank(user_);
         IERC20(token0).approve(address(fluxFarmV2), 10e6);
         fluxFarmV2.invest(token0, 10e6);
+        fluxFarmV2.updateFarm();
         fluxFarmV2.withdraw(token0, 1e4);
         vm.stopPrank();
     }

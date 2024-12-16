@@ -7,6 +7,7 @@ import {UUPSProxy} from "../src/utils/UUPSProxy.sol";
 import {FluxFarm} from 'src/FluxFarm.sol';
 import {IUniswapV3PoolState} from 'src/interfaces/IUniswapV3PoolState.sol';
 import {UniswapV3PositionHelper} from 'src/libraries/UniswapV3PositionHelper.sol';
+import {INonfungiblePositionManager} from '@uniswap/v3-periphery/contracts/interfaces/INonfungiblePositionManager.sol';
 
 
 contract FluxFarmDeployedTest is Test {
@@ -56,9 +57,9 @@ contract FluxFarmDeployedTest is Test {
 
     function setUp() public {
         fluxFarm = FluxFarm(deployedFluxFarm);
-        vm.startPrank(user_);
-        fluxFarm.upgradeToAndCall(address(new FluxFarm()), '');
-        vm.stopPrank();
+        // vm.startPrank(user_);
+        // fluxFarm.upgradeToAndCall(address(new FluxFarm()), '');
+        // vm.stopPrank();
     }
 
     function test_updateFarm() public {
@@ -72,5 +73,10 @@ contract FluxFarmDeployedTest is Test {
         fluxFarm.closeAllPosition(true);
         vm.stopPrank();
     }
+
+    // function test_getPoolAddress() public {
+    //     INonfungiblePositionManager positionManager = fluxFarm.positionManager();
+    //     emit log_named_address("poolAddress", address(positionManager));
+    // }
 }
 

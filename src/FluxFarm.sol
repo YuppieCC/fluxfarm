@@ -562,7 +562,6 @@ contract FluxFarm is AutomationCompatibleInterface, UUPSUpgradeable, AccessContr
         uint256 totalFees1;
 
         uint256 balance = getPositionBalance();
-        (uint256 positionFees0_, uint256 positionFees1_) = getAllPositionFees();
         for (uint256 i = 0; i < balance; i++) {
             uint256 tokenId = IERC721Enumerable(address(positionManager)).tokenOfOwnerByIndex(this_, i);
             // harvest
@@ -579,7 +578,7 @@ contract FluxFarm is AutomationCompatibleInterface, UUPSUpgradeable, AccessContr
             totalFees1 += fee1;
         }
 
-        _cutServiceFee(positionFees0_, positionFees1_);
+        _cutServiceFee(totalFees0, totalFees1);
         emit Harvest(totalAmount0, totalAmount1, totalFees0, totalFees1);
     }
 
