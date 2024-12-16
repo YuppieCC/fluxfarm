@@ -61,13 +61,14 @@ contract FluxFarmV2 is AutomationCompatibleInterface, UUPSUpgradeable, AccessCon
         uint256 oracleDecimals;
     }
 
-    struct ReinvestInfo {
-        uint256 reinvestID;
-        uint256 timestamp;
+    struct HarvestInfo {
+        uint256 investID;
+        uint256 startTimestamp;
+        uint256 endTimestamp;
         uint256 tokenId;
         uint256 liquidity;
-        uint256 amount0;
-        uint256 amount1;
+        uint256 totalFees0;
+        uint256 totalFees1;
     }
 
     // initialize
@@ -92,7 +93,8 @@ contract FluxFarmV2 is AutomationCompatibleInterface, UUPSUpgradeable, AccessCon
     mapping(address => uint256) public tokenInvest;
     mapping(address => uint256) public tokenWithdraw;
 
-    uint256 public latestReinvestID;
+    uint256 public latestInvestID;
+    mapping(uint256 => HarvestInfo) public harvestInfo;
     
     // config
     uint256 public slippage;
@@ -410,6 +412,32 @@ contract FluxFarmV2 is AutomationCompatibleInterface, UUPSUpgradeable, AccessCon
     }
 
     /**
+    * @notice update the harvest info when harvest
+    * @param totalFees0_ uint256
+    * @param totalFees1_ uint256
+    */
+    function _updateHarvestInfoWhenHarvest(uint256 totalFees0_, uint256 totalFees1_) internal {
+        harvestInfo[latestInvestID].endTimestamp = block.timestamp;
+        harvestInfo[latestInvestID].totalFees0 = totalFees0_;
+        harvestInfo[latestInvestID].totalFees1 = totalFees1_;
+    }
+
+    /**
+    * @notice update the harvest info when reinvest
+    * @param tokenId_ uint256
+    */
+    function _updateHarvestInfoWhenInvest(uint256 tokenId_) internal {
+        // get liquidity
+        (,,,,,,,uint128 liquidity_,,,,) = positionManager.positions(tokenId_);
+
+        latestInvestID++;
+        harvestInfo[latestInvestID].investID = latestInvestID;
+        harvestInfo[latestInvestID].startTimestamp = block.timestamp;
+        harvestInfo[latestInvestID].tokenId = tokenId_;
+        harvestInfo[latestInvestID].liquidity = liquidity_;
+    }
+
+    /**
     * @notice swap token if the amount of token0 or token1 is not enough
     * @param amount0_ uint256
     * @param amount1_ uint256
@@ -563,6 +591,7 @@ contract FluxFarmV2 is AutomationCompatibleInterface, UUPSUpgradeable, AccessCon
             totalFees1 += fee1;
         }
 
+        _updateHarvestInfoWhenHarvest(totalFees0, totalFees1);
         _cutServiceFee(totalFees0, totalFees1);
         emit Harvest(totalAmount0, totalAmount1, totalFees0, totalFees1);
     }
@@ -612,6 +641,7 @@ contract FluxFarmV2 is AutomationCompatibleInterface, UUPSUpgradeable, AccessCon
             })
         );
        
+        _updateHarvestInfoWhenInvest(farmingInfo.tokenId);
         emit Reinvest(farmingInfo.tokenId, liquidity, amount0, amount1);
         return (liquidity, amount0, amount1);
     }
@@ -727,6 +757,8 @@ contract FluxFarmV2 is AutomationCompatibleInterface, UUPSUpgradeable, AccessCon
                 burnCount++;
             }
         }
+
+        _updateHarvestInfoWhenHarvest(totalFees0, totalFees1);
 
         nowBalanceToken0 = IERC20(token0).balanceOf(this_);
         nowBalanceToken1 = IERC20(token1).balanceOf(this_);

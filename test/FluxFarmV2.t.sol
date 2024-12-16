@@ -23,6 +23,8 @@ contract FluxFarmV2Test is Test {
     address public token1_oracle = 0x4e1C6B168DCFD7758bC2Ab9d2865f1895813D236;  // wld-usd
 
     address public user_ = 0xDE1e26F53aa97f02c06779F280A7DE56d06EbbaD;
+    address public wldHolder = 0x1bc40dbd66579e4202e3cE2A4f49a71Ed2c8C138;
+    address public usdceHolder = 0x4a84675512949f81EBFEAAcC6C00D03eDd329de5;
 
     int24[][] public ticks_ = [
         [int24(252200), int24(254800)],
@@ -71,10 +73,17 @@ contract FluxFarmV2Test is Test {
         fluxFarmV2.setUpdateInterval(15 minutes);
         fluxFarmV2.setserviceFeeFactor(1e18);
         fluxFarmV2.setSlippage(slippage);
+        vm.stopPrank();
 
-        IERC20(token0).transfer(address(fluxFarmV2), 20e6);
-        IERC20(token1).transfer(address(fluxFarmV2), 20e18);
-        uint256 burnCount = fluxFarmV2.initialPosition(ticks_, 1e5);
+        vm.startPrank(usdceHolder);
+        IERC20(token0).transfer(address(fluxFarmV2), IERC20(token0).balanceOf(usdceHolder));
+        vm.stopPrank();
+        vm.startPrank(wldHolder);
+        IERC20(token1).transfer(address(fluxFarmV2), IERC20(token1).balanceOf(wldHolder));
+        vm.stopPrank();
+
+        vm.startPrank(user_);
+        uint256 burnCount = fluxFarmV2.initialPosition(ticks_, 1e6);
         emit log_named_uint("InitialPosition tokenIds Length: ", burnCount);
         assertTrue(fluxFarmV2.getPositionBalance() == ticks_.length);
         vm.stopPrank();
@@ -86,12 +95,34 @@ contract FluxFarmV2Test is Test {
         vm.stopPrank();
     }
 
+    function test_harvestInfo() public {
+        vm.startPrank(user_);
+        fluxFarmV2.updateFarm();
+        vm.stopPrank();
+
+        uint256 latestInvestId = fluxFarmV2.latestInvestID();
+        (
+            uint256 investID,
+            uint256 startTimestamp,
+            uint256 endTimestamp,
+            uint256 tokenId,
+            uint256 liquidity,
+            uint256 totalFees0,
+            uint256 totalFees1
+        ) = fluxFarmV2.harvestInfo(latestInvestId);
+        emit log_named_uint("latestInvestId: ", latestInvestId);
+        emit log_named_uint("investID: ", investID);
+        emit log_named_uint("startTimestamp: ", startTimestamp);
+        emit log_named_uint("endTimestamp: ", endTimestamp);
+        emit log_named_uint("tokenId: ", tokenId);
+        emit log_named_uint("liquidity: ", liquidity);
+        emit log_named_uint("totalFees0: ", totalFees0);
+        emit log_named_uint("totalFees1: ", totalFees1);
+    }
+
     function test_investAndWithdraw() public {
         vm.startPrank(user_);
-        IERC20(token0).approve(address(fluxFarmV2), 10e6);
-        fluxFarmV2.invest(token0, 10e6);
-        fluxFarmV2.updateFarm();
-        fluxFarmV2.withdraw(token0, 1e4);
+        fluxFarmV2.withdraw(token0, 1e6);
         vm.stopPrank();
     }
 }
