@@ -12,7 +12,7 @@ testall:
 	forge test --fork-url ${NETWORK_RPC_URL} -vvv
 
 st:
-	forge test --match-contract ${TEST_CONTRACT} --fork-url ${NETWORK_RPC_URL} -vvv --via-ir
+	forge test --match-contract ${TEST_CONTRACT} --fork-url ${NETWORK_RPC_URL} -vvvv --via-ir
 
 report:
 	forge test --fork-url ${NETWORK_RPC_URL} --gas-report

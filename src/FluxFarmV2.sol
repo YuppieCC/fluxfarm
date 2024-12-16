@@ -22,8 +22,8 @@ import {AutomationCompatibleInterface} from 'src/interfaces/AutomationCompatible
 
 
 contract FluxFarmV2 is AutomationCompatibleInterface, UUPSUpgradeable, AccessControl, TokenTransfer, IERC721Receiver, IFluxFarmV2 {
-    event Invest(address token_, uint256 amount_, uint256 price_, uint256 value_, uint256 newTotalInvest_);
-    event Withdraw(address token_, uint256 amount_, uint256 price_, uint256 value_, uint256 newTotalWithdraw_);
+    event Invest(address token_, uint256 amount_, uint256 value_, uint256 newTotalInvest_);
+    event Withdraw(address token_, uint256 amount_, uint256 value_, uint256 newTotalWithdraw_);
     event Harvest(uint256 totalAmount0_, uint256 totalAmount1_, uint256 totalFees0_, uint256 totalFees1_);
     event Reinvest(uint256 tokenId_, uint256 liquidity_, uint256 amount0_, uint256 amount1_);
     event UpdateFarm(address msgSender_, uint256 timestamp_, uint256 blockNumber_);
@@ -39,7 +39,6 @@ contract FluxFarmV2 is AutomationCompatibleInterface, UUPSUpgradeable, AccessCon
     );
     event InitialPosition(uint256 positionCount_);
     event CloseAllPosition(
-        uint256 burnCount_,
         uint256 totalAmount0_,
         uint256 totalAmount1_,
         uint256 totalFees0_,
@@ -60,6 +59,15 @@ contract FluxFarmV2 is AutomationCompatibleInterface, UUPSUpgradeable, AccessCon
         uint256 price;
         address oracle;
         uint256 oracleDecimals;
+    }
+
+    struct ReinvestInfo {
+        uint256 reinvestID;
+        uint256 timestamp;
+        uint256 tokenId;
+        uint256 liquidity;
+        uint256 amount0;
+        uint256 amount1;
     }
 
     // initialize
@@ -83,6 +91,8 @@ contract FluxFarmV2 is AutomationCompatibleInterface, UUPSUpgradeable, AccessCon
     uint256 public token1PriceInToken0;
     mapping(address => uint256) public tokenInvest;
     mapping(address => uint256) public tokenWithdraw;
+
+    uint256 public latestReinvestID;
     
     // config
     uint256 public slippage;
@@ -722,7 +732,6 @@ contract FluxFarmV2 is AutomationCompatibleInterface, UUPSUpgradeable, AccessCon
         nowBalanceToken1 = IERC20(token1).balanceOf(this_);
         
         emit CloseAllPosition(
-            burnCount,
             totalAmount0,
             totalAmount1,
             totalFees0,
@@ -742,7 +751,7 @@ contract FluxFarmV2 is AutomationCompatibleInterface, UUPSUpgradeable, AccessCon
 
         totalInvest = newtotalInvest;
         tokenInvest[token_] += amountReceived;
-        emit Invest(token_, amountReceived, tokenInfo[token_].price, tokenValue, totalInvest);
+        emit Invest(token_, amountReceived, tokenValue, totalInvest);
         return tokenValue;
     }
 
@@ -756,7 +765,7 @@ contract FluxFarmV2 is AutomationCompatibleInterface, UUPSUpgradeable, AccessCon
 
         totalWithdraw = newtotalWithdraw;
         tokenWithdraw[token_] += amountWithdraw;
-        emit Withdraw(token_, amountWithdraw, tokenInfo[token_].price, tokenValue, totalWithdraw);
+        emit Withdraw(token_, amountWithdraw, tokenValue, totalWithdraw);
         return tokenValue;
     }
 
