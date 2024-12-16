@@ -217,6 +217,11 @@ contract FluxFarmV2 is AutomationCompatibleInterface, UUPSUpgradeable, AccessCon
     }
 
     /// @inheritdoc IFluxFarmV2
+    function getFarmingInfo() public view returns (uint256, int24, int24) {
+        return (farmingInfo.tokenId, farmingInfo.tickLower, farmingInfo.tickUpper);
+    }
+
+    /// @inheritdoc IFluxFarmV2
     function getPositionFee(uint256 tokenId_) public view returns (uint256, uint256) {
         (
             ,,,,,

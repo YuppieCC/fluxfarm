@@ -24,15 +24,15 @@ contract FluxFarmV2DeployedTest is Test {
     address public token1 = 0xdC6fF44d5d932Cbd77B52E5612Ba0529DC6226F1; // wld
 
     address public user_ = 0xDE1e26F53aa97f02c06779F280A7DE56d06EbbaD;
-    address public deployedFluxFarm = 0xF85cc35AF0ffa8739a03818fd18b821Ae829404B;
+    address public deployedFluxFarm = 0xfc078b6dA7eb45a858C58cD8f66e3C6d64Cd5C3F;
 
     uint256 public serviceFeeSlippage_ = 800000000000000000;
 
     function setUp() public {
         fluxFarmV2 = FluxFarmV2(deployedFluxFarm);
-        // vm.startPrank(user_);
-        // fluxFarm.upgradeToAndCall(address(new FluxFarm()), '');
-        // vm.stopPrank();
+        vm.startPrank(user_);
+        fluxFarmV2.upgradeToAndCall(address(new FluxFarmV2()), '');
+        vm.stopPrank();
     }
 
     // function test_updateFarm() public {
@@ -47,19 +47,26 @@ contract FluxFarmV2DeployedTest is Test {
     //     vm.stopPrank();
     // }
 
-    function test_invest() public {
-        vm.startPrank(user_);
-        IERC20(token0).approve(address(fluxFarmV2), IERC20(token0).balanceOf(user_));
-        fluxFarmV2.invest(token0, IERC20(token0).balanceOf(user_));
+    // function test_invest() public {
+    //     vm.startPrank(user_);
+    //     IERC20(token0).approve(address(fluxFarmV2), IERC20(token0).balanceOf(user_));
+    //     fluxFarmV2.invest(token0, IERC20(token0).balanceOf(user_));
 
-        IERC20(token1).approve(address(fluxFarmV2), IERC20(token1).balanceOf(user_));
-        fluxFarmV2.invest(token1, IERC20(token1).balanceOf(user_));
-        vm.stopPrank();
-    }
+    //     IERC20(token1).approve(address(fluxFarmV2), IERC20(token1).balanceOf(user_));
+    //     fluxFarmV2.invest(token1, IERC20(token1).balanceOf(user_));
+    //     vm.stopPrank();
+    // }
 
     // function test_getPoolAddress() public {
     //     INonfungiblePositionManager positionManager = fluxFarm.positionManager();
     //     emit log_named_address("poolAddress", address(positionManager));
     // }
+
+    function test_getFarmingInfo() public {
+        (uint256 tokenId, int24 tickLower, int24 tickUpper) = fluxFarmV2.getFarmingInfo();
+        emit log_named_uint("tokenId", tokenId);
+        emit log_named_int("tickLower", tickLower);
+        emit log_named_int("tickUpper", tickUpper);
+    }
 }
 

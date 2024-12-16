@@ -40,6 +40,12 @@ interface IFluxFarmV2 {
     function updateFarmTrigger() external view returns (bool);
 
     /**
+    * @notice check the farming info.
+    * @return tokenId, tickLower, tickUpper
+    */
+    function getFarmingInfo() external view returns (uint256, int24, int24);
+
+    /**
     * @notice check the position balance.
     * @return balance
     */
