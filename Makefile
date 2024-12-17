@@ -13,6 +13,7 @@ testall:
 
 st:
 	forge test --match-contract ${TEST_CONTRACT} --fork-url ${NETWORK_RPC_URL} -vvvv --via-ir
+	 --via-ir
 
 report:
 	forge test --fork-url ${NETWORK_RPC_URL} --gas-report

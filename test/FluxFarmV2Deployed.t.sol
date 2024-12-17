@@ -30,16 +30,17 @@ contract FluxFarmV2DeployedTest is Test {
 
     function setUp() public {
         fluxFarmV2 = FluxFarmV2(deployedFluxFarm);
-        vm.startPrank(user_);
-        fluxFarmV2.upgradeToAndCall(address(new FluxFarmV2()), '');
-        vm.stopPrank();
+        // vm.startPrank(user_);
+        // fluxFarmV2.upgradeToAndCall(address(new FluxFarmV2()), '');
+        // vm.stopPrank();
     }
 
-    // function test_updateFarm() public {
-    //     vm.startPrank(user_);
-    //     fluxFarm.updateFarm();
-    //     vm.stopPrank();
-    // }
+    function test_updateFarm() public {
+        vm.startPrank(user_);
+        // fluxFarmV2.setSlippage(20e16);
+        fluxFarmV2.AutoUpdateFarm();
+        vm.stopPrank();
+    }
 
     // function test_closeAllPosition() public {
     //     vm.startPrank(user_);
@@ -62,11 +63,11 @@ contract FluxFarmV2DeployedTest is Test {
     //     emit log_named_address("poolAddress", address(positionManager));
     // }
 
-    function test_getFarmingInfo() public {
-        (uint256 tokenId, int24 tickLower, int24 tickUpper) = fluxFarmV2.getFarmingInfo();
-        emit log_named_uint("tokenId", tokenId);
-        emit log_named_int("tickLower", tickLower);
-        emit log_named_int("tickUpper", tickUpper);
-    }
+    // function test_getFarmingInfo() public {
+    //     (uint256 tokenId, int24 tickLower, int24 tickUpper) = fluxFarmV2.getFarmingInfo();
+    //     emit log_named_uint("tokenId", tokenId);
+    //     emit log_named_int("tickLower", tickLower);
+    //     emit log_named_int("tickUpper", tickUpper);
+    // }
 }
 
