@@ -44,7 +44,8 @@ verify-contract:
 		--etherscan-api-key ${ETHERSCAN_KEY} \
 		--compiler-version ${COMPILER_VERSION} \
 		$(DEPLOYED_CONTRACT_ADDRESS) \
-		src/$(VERIFY_CONTRACT).sol:$(VERIFY_CONTRACT)
+		src/$(VERIFY_CONTRACT).sol:$(VERIFY_CONTRACT) \
+		--via-ir
 
 verify-check:
 	forge verify-check --chain-id ${CHAIN_ID} $(GUID) ${ETHERSCAN_KEY}

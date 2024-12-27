@@ -30,17 +30,17 @@ contract FluxFarmV2DeployedTest is Test {
 
     function setUp() public {
         fluxFarmV2 = FluxFarmV2(deployedFluxFarm);
-        // vm.startPrank(user_);
-        // fluxFarmV2.upgradeToAndCall(address(new FluxFarmV2()), '');
-        // vm.stopPrank();
-    }
-
-    function test_updateFarm() public {
         vm.startPrank(user_);
-        // fluxFarmV2.setSlippage(20e16);
-        fluxFarmV2.AutoUpdateFarm();
+        fluxFarmV2.upgradeToAndCall(address(new FluxFarmV2()), '');
         vm.stopPrank();
     }
+
+    // function test_updateFarm() public {
+    //     vm.startPrank(user_);
+        // fluxFarmV2.setSlippage(20e16);
+        // fluxFarmV2.AutoUpdateFarm();
+        // vm.stopPrank();
+    // }
 
     // function test_closeAllPosition() public {
     //     vm.startPrank(user_);
@@ -69,5 +69,28 @@ contract FluxFarmV2DeployedTest is Test {
     //     emit log_named_int("tickLower", tickLower);
     //     emit log_named_int("tickUpper", tickUpper);
     // }
+
+    function test_reinvestFromBalance() public {
+        vm.startPrank(user_);
+        uint256 beforebalance0 = IERC20(token0).balanceOf(address(fluxFarmV2));
+        uint256 beforebalance1 = IERC20(token1).balanceOf(address(fluxFarmV2));
+        emit log_named_uint("beforebalance0", beforebalance0);
+        emit log_named_uint("beforebalance1", beforebalance1);
+        (uint128 liquidity, uint256 amount0, uint256 amount1) = fluxFarmV2.reinvestFromBalance();
+        emit log_named_uint("liquidity", liquidity);
+        emit log_named_uint("amount0", amount0);
+        emit log_named_uint("amount1", amount1);
+        uint256 afterbalance0 = IERC20(token0).balanceOf(address(fluxFarmV2));
+        uint256 afterbalance1 = IERC20(token1).balanceOf(address(fluxFarmV2));
+        emit log_named_uint("afterbalance0", afterbalance0);
+        emit log_named_uint("afterbalance1", afterbalance1);
+
+        // get harvest info
+        (uint256 tokenId, int24 tickLower, int24 tickUpper) = fluxFarmV2.getFarmingInfo();
+        emit log_named_uint("tokenId", tokenId);
+        emit log_named_int("tickLower", tickLower);
+        emit log_named_int("tickUpper", tickUpper);
+        vm.stopPrank();
+    }
 }
 

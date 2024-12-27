@@ -144,6 +144,12 @@ interface IFluxFarmV2 {
     function withdraw(address token_, uint256 amount_) external returns (uint256);
 
     /**
+    * @notice reinvest from balance.
+    * @return liquidity, amount0, amount1
+    */
+    function reinvestFromBalance() external returns (uint128, uint256, uint256);
+
+    /**
     * @notice claim tokens.
     * @param token_ address
     * @param to_ address

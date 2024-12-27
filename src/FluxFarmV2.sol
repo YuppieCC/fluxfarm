@@ -675,6 +675,32 @@ contract FluxFarmV2 is AutomationCompatibleInterface, UUPSUpgradeable, AccessCon
     }
 
     /// @inheritdoc IFluxFarmV2
+    function reinvestFromBalance() external onlyRole(MANAGER) returns (uint128, uint256, uint256) {
+        if (farmingInfo.hasOutOfAllTicks) {
+            return (0, 0, 0);
+        }
+
+        (uint256 nowToken0Balance, uint256 nowToken1Balance) = _rebalanceToken();
+
+        // increase liquidity
+        (uint128 liquidity, uint256 amount0, uint256 amount1) = positionManager.increaseLiquidity(
+            INonfungiblePositionManager.IncreaseLiquidityParams({
+                tokenId: farmingInfo.tokenId,
+                amount0Desired: nowToken0Balance,
+                amount1Desired: nowToken1Balance,
+                amount0Min: getAmountAfterSlippage(nowToken0Balance, slippage),
+                amount1Min: getAmountAfterSlippage(nowToken1Balance, slippage),
+                deadline: block.timestamp + 15 minutes
+            })
+        );
+       
+       (,,,,,,,uint128 _liquidity,,,,) = positionManager.positions(farmingInfo.tokenId);
+        harvestInfo[latestInvestID].liquidity = _liquidity;
+        emit Reinvest(farmingInfo.tokenId, liquidity, amount0, amount1);
+        return (liquidity, amount0, amount1);
+    }
+
+    /// @inheritdoc IFluxFarmV2
     function claimTokens(address token_, address to_, uint256 amount_) external onlyRole(SAFE_ADMIN) {
         require(to_ == receiver, "INVALID_RECEIVER");
         if (token_ == address(0)) {
