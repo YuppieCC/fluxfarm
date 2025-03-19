@@ -27,24 +27,59 @@ contract FluxFarmV2DeployedTest is Test {
     address public deployedFluxFarm = 0xfc078b6dA7eb45a858C58cD8f66e3C6d64Cd5C3F;
 
     uint256 public serviceFeeSlippage_ = 800000000000000000;
+    uint256 public onePositionValueInToken0_ = 1e6;
+
+    int24[][] public ticks_ = [
+        [int24(264200), int24(264600)],
+        [int24(264400), int24(264800)],
+        [int24(264600), int24(265000)],
+        [int24(264800), int24(265200)],
+        [int24(265000), int24(265400)],
+        [int24(265200), int24(265600)],
+        [int24(265400), int24(265800)],
+        [int24(265600), int24(266000)],
+        [int24(265600), int24(266200)],
+        [int24(265800), int24(266400)],
+        [int24(266000), int24(266600)],
+        [int24(266200), int24(266800)],
+        [int24(266400), int24(267000)],
+        [int24(266600), int24(267200)],
+        [int24(266800), int24(267400)],
+        [int24(267000), int24(267600)],
+        [int24(267200), int24(267800)],
+        [int24(267400), int24(268000)],
+        [int24(267600), int24(268200)],
+        [int24(267800), int24(268400)],
+        [int24(268000), int24(268600)],
+        [int24(268200), int24(268800)],
+        [int24(268400), int24(269000)],
+        [int24(268600), int24(269200)],
+        [int24(268800), int24(269400)],
+        [int24(269000), int24(269600)],
+        [int24(269200), int24(269800)],
+        [int24(269400), int24(270000)],
+        [int24(269600), int24(270200)],
+        [int24(269800), int24(270400)]
+    ];
 
     function setUp() public {
         fluxFarmV2 = FluxFarmV2(deployedFluxFarm);
+        // vm.startPrank(user_);
+        // fluxFarmV2.upgradeToAndCall(address(new FluxFarmV2()), '');
+        // vm.stopPrank();
+    }
+
+    function test_updateFarm() public {
         vm.startPrank(user_);
-        fluxFarmV2.upgradeToAndCall(address(new FluxFarmV2()), '');
+        fluxFarmV2.setSlippage(20e16);
+        fluxFarmV2.AutoUpdateFarm();
         vm.stopPrank();
     }
 
-    // function test_updateFarm() public {
-    //     vm.startPrank(user_);
-        // fluxFarmV2.setSlippage(20e16);
-        // fluxFarmV2.AutoUpdateFarm();
-        // vm.stopPrank();
-    // }
-
     // function test_closeAllPosition() public {
     //     vm.startPrank(user_);
-    //     fluxFarm.closeAllPosition(true);
+    //     fluxFarmV2.closeAllPosition(true);
+    //     fluxFarmV2.initialPosition(ticks_, onePositionValueInToken0_);
     //     vm.stopPrank();
     // }
 
@@ -70,27 +105,27 @@ contract FluxFarmV2DeployedTest is Test {
     //     emit log_named_int("tickUpper", tickUpper);
     // }
 
-    function test_reinvestFromBalance() public {
-        vm.startPrank(user_);
-        uint256 beforebalance0 = IERC20(token0).balanceOf(address(fluxFarmV2));
-        uint256 beforebalance1 = IERC20(token1).balanceOf(address(fluxFarmV2));
-        emit log_named_uint("beforebalance0", beforebalance0);
-        emit log_named_uint("beforebalance1", beforebalance1);
-        (uint128 liquidity, uint256 amount0, uint256 amount1) = fluxFarmV2.reinvestFromBalance();
-        emit log_named_uint("liquidity", liquidity);
-        emit log_named_uint("amount0", amount0);
-        emit log_named_uint("amount1", amount1);
-        uint256 afterbalance0 = IERC20(token0).balanceOf(address(fluxFarmV2));
-        uint256 afterbalance1 = IERC20(token1).balanceOf(address(fluxFarmV2));
-        emit log_named_uint("afterbalance0", afterbalance0);
-        emit log_named_uint("afterbalance1", afterbalance1);
+    // function test_reinvestFromBalance() public {
+    //     vm.startPrank(user_);
+    //     uint256 beforebalance0 = IERC20(token0).balanceOf(address(fluxFarmV2));
+    //     uint256 beforebalance1 = IERC20(token1).balanceOf(address(fluxFarmV2));
+    //     emit log_named_uint("beforebalance0", beforebalance0);
+    //     emit log_named_uint("beforebalance1", beforebalance1);
+    //     (uint128 liquidity, uint256 amount0, uint256 amount1) = fluxFarmV2.reinvestFromBalance();
+    //     emit log_named_uint("liquidity", liquidity);
+    //     emit log_named_uint("amount0", amount0);
+    //     emit log_named_uint("amount1", amount1);
+    //     uint256 afterbalance0 = IERC20(token0).balanceOf(address(fluxFarmV2));
+    //     uint256 afterbalance1 = IERC20(token1).balanceOf(address(fluxFarmV2));
+    //     emit log_named_uint("afterbalance0", afterbalance0);
+    //     emit log_named_uint("afterbalance1", afterbalance1);
 
-        // get harvest info
-        (uint256 tokenId, int24 tickLower, int24 tickUpper) = fluxFarmV2.getFarmingInfo();
-        emit log_named_uint("tokenId", tokenId);
-        emit log_named_int("tickLower", tickLower);
-        emit log_named_int("tickUpper", tickUpper);
-        vm.stopPrank();
-    }
+    //     // get harvest info
+    //     (uint256 tokenId, int24 tickLower, int24 tickUpper) = fluxFarmV2.getFarmingInfo();
+    //     emit log_named_uint("tokenId", tokenId);
+    //     emit log_named_int("tickLower", tickLower);
+    //     emit log_named_int("tickUpper", tickUpper);
+    //     vm.stopPrank();
+    // }
 }
 
